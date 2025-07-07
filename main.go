@@ -35,12 +35,13 @@ var (
 	secretKey   = ""
 	proxyURL    = "http://127.0.0.1:10809"
 	klinesCount = 200
-	maxWorkers  = 40
+	maxWorkers  = 20
 	limitVolume = 50000000 // 3 亿 USDT
 	botToken    = "8040107823:AAHC_qu5cguJf9BG4NDiUB_nwpgF-bPkJAg"
 	chatID      = "6074996357"
 
-	volumeMap      = map[string]float64{}
+	// volumeMap      = map[string]float64{}
+	volumeCache    *utils.VolumeCache
 	slipCoin       = []string{"XRPUSDT", "DOGEUSDT", "1000PEPEUSDT", "ADAUSDT", "BNBUSDT"} // 想排除的币放这里
 	muVolumeMap    sync.Mutex
 	progressLogger = log.New(os.Stdout, "[Screener] ", log.LstdFlags)
@@ -59,11 +60,15 @@ func main() {
 		log.Fatalf("获取交易所信息失败: %v", err)
 	}
 
-	// ws启动的volumeCache
-	volumeCache, err := utils.NewVolumeCache()
+	// 创建并预热 VolumeCache
+	volumeCache, err = utils.NewVolumeCache(client)
 	if err != nil {
-		log.Fatalf("volume WS 启动失败: %v", err)
+		log.Fatalf("VolumeCache 启动失败: %v", err)
 	}
+
+	// 等到 WS 至少推送过一次
+	<-volumeCache.Ready()
+	log.Println("volumeCache 启动成功")
 	defer volumeCache.Close()
 
 	ticker := time.NewTicker(15 * time.Minute)
@@ -95,10 +100,6 @@ func runScan(client *futures.Client, exchangeInfo *futures.ExchangeInfo) error {
 	}
 	progressLogger.Printf("USDT 交易对数量: %d", len(symbols))
 
-	// ---------- 2. 刷新 24h 成交额 ----------
-	utils.Get24HVolume(client, volumeMap)
-	progressLogger.Println("已拉取 24h 成交额")
-
 	// ---------- 3. 并发处理 ----------
 	var (
 		results []CoinIndicator
@@ -108,7 +109,7 @@ func runScan(client *futures.Client, exchangeInfo *futures.ExchangeInfo) error {
 	)
 
 	for _, symbol := range symbols {
-		if volumeMap[symbol] < float64(limitVolume) {
+		if vol, ok := volumeCache.Get(symbol); !ok || vol < float64(limitVolume) {
 			continue
 		}
 		if inSlip(symbol) {
@@ -147,19 +148,10 @@ func runScan(client *futures.Client, exchangeInfo *futures.ExchangeInfo) error {
 /* ====================== 单币分析 ====================== */
 
 func analyseSymbol(client *futures.Client, symbol, tf string) (CoinIndicator, bool) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 7*time.Second)
 	defer cancel()
 
-	/* 	klines, err := client.NewKlinesService().
-	   		Symbol(symbol).Interval(tf).
-	   		Limit(klinesCount).Do(ctx)
-	   	if err != nil || len(klines) < 35 {
-	   		if err != nil {
-	   			progressLogger.Printf("拉取 %s K 线失败: %v", symbol, err) // 👈
-	   		}
-	   		return CoinIndicator{}, false
-	   	} */
-	const maxRetries = 3
+	const maxRetries = 2
 
 	var (
 		klines []*futures.Kline
@@ -209,7 +201,7 @@ func analyseSymbol(client *futures.Client, symbol, tf string) (CoinIndicator, bo
 
 	price := closes[len(closes)-1]
 	up := ema25[len(ema25)-1] > ema50[len(ema50)-1] && price > ema50[len(ema50)-1]
-	down := ema25[len(ema25)-1] < ema50[len(ema50)-1] && price < ema25[len(ema25)-1]
+	down := ema25[len(ema25)-1] < ema50[len(ema50)-1] && price < ema50[len(ema50)-1]
 
 	buyCond := kLine[len(kLine)-1] < 25 || kLine[len(kLine)-2] < 20
 	sellCond := kLine[len(kLine)-1] > 85 || kLine[len(kLine)-2] > 90
@@ -236,7 +228,10 @@ func pushTelegram(results []CoinIndicator) error {
 		return err
 	}
 	for _, r := range results {
-		volume := volumeMap[r.Symbol]
+		volume, ok := volumeCache.Get(r.Symbol)
+		if !ok {
+			volume = 0
+		}
 		operation := r.Operation
 
 		if operation == "Buy" && volume > 300000000 {
