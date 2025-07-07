@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"sort"
 	"strconv"
 	"sync"
 	"time"
@@ -35,12 +36,12 @@ var (
 	proxyURL    = "http://127.0.0.1:10809"
 	klinesCount = 200
 	maxWorkers  = 40
-	limitVolume = 3e8 // 3 亿 USDT
+	limitVolume = 50000000 // 3 亿 USDT
 	botToken    = "8040107823:AAHC_qu5cguJf9BG4NDiUB_nwpgF-bPkJAg"
 	chatID      = "6074996357"
 
 	volumeMap      = map[string]float64{}
-	slipCoin       = []string{} // 想排除的币放这里
+	slipCoin       = []string{"XRPUSDT", "DOGEUSDT", "1000PEPEUSDT", "ADAUSDT", "BNBUSDT"} // 想排除的币放这里
 	muVolumeMap    sync.Mutex
 	progressLogger = log.New(os.Stdout, "[Screener] ", log.LstdFlags)
 )
@@ -57,6 +58,13 @@ func main() {
 	if err != nil {
 		log.Fatalf("获取交易所信息失败: %v", err)
 	}
+
+	// ws启动的volumeCache
+	volumeCache, err := utils.NewVolumeCache()
+	if err != nil {
+		log.Fatalf("volume WS 启动失败: %v", err)
+	}
+	defer volumeCache.Close()
 
 	ticker := time.NewTicker(15 * time.Minute)
 	defer ticker.Stop()
@@ -100,7 +108,7 @@ func runScan(client *futures.Client, exchangeInfo *futures.ExchangeInfo) error {
 	)
 
 	for _, symbol := range symbols {
-		if volumeMap[symbol] < limitVolume {
+		if volumeMap[symbol] < float64(limitVolume) {
 			continue
 		}
 		if inSlip(symbol) {
@@ -128,6 +136,10 @@ func runScan(client *futures.Client, exchangeInfo *futures.ExchangeInfo) error {
 	wg.Wait()
 	progressLogger.Printf("本轮符合条件标的数量: %d", len(results))
 
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].StochRSI > results[j].StochRSI // “>” 表示降序
+	})
+
 	// ---------- 4. 推送到 Telegram ----------
 	return pushTelegram(results)
 }
@@ -138,13 +150,44 @@ func analyseSymbol(client *futures.Client, symbol, tf string) (CoinIndicator, bo
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	klines, err := client.NewKlinesService().
-		Symbol(symbol).Interval(tf).
-		Limit(klinesCount).Do(ctx)
-	if err != nil || len(klines) < 35 {
-		if err != nil {
-			progressLogger.Printf("拉取 %s K 线失败: %v", symbol, err) // 👈
+	/* 	klines, err := client.NewKlinesService().
+	   		Symbol(symbol).Interval(tf).
+	   		Limit(klinesCount).Do(ctx)
+	   	if err != nil || len(klines) < 35 {
+	   		if err != nil {
+	   			progressLogger.Printf("拉取 %s K 线失败: %v", symbol, err) // 👈
+	   		}
+	   		return CoinIndicator{}, false
+	   	} */
+	const maxRetries = 3
+
+	var (
+		klines []*futures.Kline
+		err    error
+	)
+
+	// 最多尝试 3 次
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		klines, err = client.NewKlinesService().
+			Symbol(symbol).Interval(tf).
+			Limit(klinesCount).Do(ctx)
+
+		// 拉取成功且数量够用，直接跳出循环
+		if err == nil && len(klines) >= 35 {
+			break
 		}
+
+		// 记录本次失败
+		progressLogger.Printf("第 %d 次拉取 %s K 线失败: %v", attempt, symbol, err)
+
+		// 如果还没到最后一次，可以选择短暂等待再试（可按需调整或使用指数退避）
+		if attempt < maxRetries {
+			time.Sleep(time.Second)
+		}
+	}
+
+	// 若三次仍失败或数量不足，返回失败标记
+	if err != nil || len(klines) < 35 {
 		return CoinIndicator{}, false
 	}
 
@@ -166,10 +209,10 @@ func analyseSymbol(client *futures.Client, symbol, tf string) (CoinIndicator, bo
 
 	price := closes[len(closes)-1]
 	up := ema25[len(ema25)-1] > ema50[len(ema50)-1] && price > ema50[len(ema50)-1]
-	down := ema25[len(ema25)-1] < ema50[len(ema50)-1] && price < ema50[len(ema50)-1]
+	down := ema25[len(ema25)-1] < ema50[len(ema50)-1] && price < ema25[len(ema25)-1]
 
-	buyCond := kLine[len(kLine)-1] < 25 && kLine[len(kLine)-2] < 25
-	sellCond := kLine[len(kLine)-1] > 75 && kLine[len(kLine)-2] > 75
+	buyCond := kLine[len(kLine)-1] < 25 || kLine[len(kLine)-2] < 20
+	sellCond := kLine[len(kLine)-1] > 85 || kLine[len(kLine)-2] > 90
 
 	switch {
 	case up && buyCond:
@@ -193,10 +236,21 @@ func pushTelegram(results []CoinIndicator) error {
 		return err
 	}
 	for _, r := range results {
-		msg := fmt.Sprintf("%-4s %-10s SRSI:%3.1f",
-			r.Operation, r.Symbol, r.StochRSI)
-		if err := telegram.SendMessage(botToken, chatID, msg); err != nil {
-			return err
+		volume := volumeMap[r.Symbol]
+		operation := r.Operation
+
+		if operation == "Buy" && volume > 300000000 {
+			msg := fmt.Sprintf("🟢%-4s %-10s SRSI:%3.1f",
+				r.Operation, r.Symbol, r.StochRSI)
+			if err := telegram.SendMessage(botToken, chatID, msg); err != nil {
+				return err
+			}
+		} else if operation == "Sell" && volume > 50000000 {
+			msg := fmt.Sprintf("🔴%-4s %-10s SRSI:%3.1f",
+				r.Operation, r.Symbol, r.StochRSI)
+			if err := telegram.SendMessage(botToken, chatID, msg); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
