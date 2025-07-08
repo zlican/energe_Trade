@@ -60,27 +60,38 @@ func main() {
 		log.Fatalf("VolumeCache 启动失败: %v", err)
 	}
 
-	// 等到 WS 至少推送过一次
 	<-volumeCache.Ready()
 	log.Println("volumeCache 启动成功")
 	defer volumeCache.Close()
 
-	ticker := time.NewTicker(15 * time.Minute)
-	defer ticker.Stop()
-
 	model.InitDB()
 	db = model.DB
 
+	// 立即执行一次
 	utils.Update1hEMA50ToDB(client, db, float64(limitVolume), klinesCount, volumeCache, slipCoin)
-
-	// 立即跑一次
 	if err := runScan(client, exchangeInfo); err != nil {
 		progressLogger.Printf("首次 scan 出错: %v", err)
 	}
 
-	for range ticker.C {
-		if err := runScan(client, exchangeInfo); err != nil {
-			progressLogger.Printf("周期 scan 出错: %v", err)
+	for {
+		now := time.Now()
+		next := now.Truncate(time.Minute).Add(time.Minute) // 下一分钟的开始时间
+		time.Sleep(time.Until(next))                       // 每分钟检查一次
+
+		now = time.Now()
+		minute := now.Minute()
+		hour := now.Hour()
+
+		if minute == 0 {
+			progressLogger.Printf("整点 %02d:00，执行 Update1hEMA50ToDB", hour)
+			go utils.Update1hEMA50ToDB(client, db, float64(limitVolume), klinesCount, volumeCache, slipCoin)
+		}
+		if minute%15 == 0 {
+			progressLogger.Printf("每15分钟触发，执行 runScan (%02d:%02d)", hour, minute)
+			if err := runScan(client, exchangeInfo); err != nil {
+				progressLogger.Printf("周期 scan 出错: %v", err)
+			}
+			time.Sleep(1 * time.Minute)
 		}
 	}
 }
