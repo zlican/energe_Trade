@@ -3,9 +3,10 @@ package main
 import (
 	"context"
 	"crypto/tls"
-	"energe/telegram"
+	"database/sql"
+	"energe/model"
+	"energe/types"
 	"energe/utils"
-	"fmt"
 	"log"
 	"net/http"
 	"net/url"
@@ -22,14 +23,6 @@ import (
 
 /* ====================== 结构体 & 全局 ====================== */
 
-type CoinIndicator struct {
-	Symbol       string
-	Price        float64
-	TimeInternal string
-	StochRSI     float64 // 只存最后一个值够用了
-	Operation    string
-}
-
 var (
 	apiKey      = ""
 	secretKey   = ""
@@ -41,10 +34,11 @@ var (
 	chatID      = "6074996357"
 
 	// volumeMap      = map[string]float64{}
-	volumeCache    *utils.VolumeCache
+	volumeCache    *types.VolumeCache
 	slipCoin       = []string{"XRPUSDT", "DOGEUSDT", "1000PEPEUSDT", "ADAUSDT", "BNBUSDT"} // 想排除的币放这里
 	muVolumeMap    sync.Mutex
 	progressLogger = log.New(os.Stdout, "[Screener] ", log.LstdFlags)
+	db             *sql.DB
 )
 
 /* ====================== 主函数 ====================== */
@@ -74,6 +68,11 @@ func main() {
 	ticker := time.NewTicker(15 * time.Minute)
 	defer ticker.Stop()
 
+	model.InitDB()
+	db = model.DB
+
+	utils.Update1hEMA50ToDB(client, db, float64(limitVolume), klinesCount, volumeCache, slipCoin)
+
 	// 立即跑一次
 	if err := runScan(client, exchangeInfo); err != nil {
 		progressLogger.Printf("首次 scan 出错: %v", err)
@@ -102,7 +101,7 @@ func runScan(client *futures.Client, exchangeInfo *futures.ExchangeInfo) error {
 
 	// ---------- 3. 并发处理 ----------
 	var (
-		results []CoinIndicator
+		results []types.CoinIndicator
 		resMu   sync.Mutex
 		wg      sync.WaitGroup
 		sem     = semaphore.NewWeighted(int64(maxWorkers))
@@ -112,7 +111,7 @@ func runScan(client *futures.Client, exchangeInfo *futures.ExchangeInfo) error {
 		if vol, ok := volumeCache.Get(symbol); !ok || vol < float64(limitVolume) {
 			continue
 		}
-		if inSlip(symbol) {
+		if utils.IsSlipCoin(symbol, slipCoin) {
 			continue
 		}
 
@@ -142,12 +141,13 @@ func runScan(client *futures.Client, exchangeInfo *futures.ExchangeInfo) error {
 	})
 
 	// ---------- 4. 推送到 Telegram ----------
-	return pushTelegram(results)
+	return utils.PushTelegram(results, botToken, chatID, volumeCache)
 }
 
 /* ====================== 单币分析 ====================== */
 
-func analyseSymbol(client *futures.Client, symbol, tf string) (CoinIndicator, bool) {
+func analyseSymbol(client *futures.Client, symbol, tf string) (types.CoinIndicator, bool) {
+
 	ctx, cancel := context.WithTimeout(context.Background(), 7*time.Second)
 	defer cancel()
 
@@ -180,7 +180,7 @@ func analyseSymbol(client *futures.Client, symbol, tf string) (CoinIndicator, bo
 
 	// 若三次仍失败或数量不足，返回失败标记
 	if err != nil || len(klines) < 35 {
-		return CoinIndicator{}, false
+		return types.CoinIndicator{}, false
 	}
 
 	closes := make([]float64, len(klines))
@@ -200,8 +200,9 @@ func analyseSymbol(client *futures.Client, symbol, tf string) (CoinIndicator, bo
 	}
 
 	price := closes[len(closes)-1]
-	up := ema25[len(ema25)-1] > ema50[len(ema50)-1] && price > ema50[len(ema50)-1]
-	down := ema25[len(ema25)-1] < ema50[len(ema50)-1] && price < ema50[len(ema50)-1]
+	priceGT_EMA25 := utils.GetPriceGT_EMA25FromDB(db, symbol)
+	up := ema25[len(ema25)-1] > ema50[len(ema50)-1] && priceGT_EMA25
+	down := ema25[len(ema25)-1] < ema50[len(ema50)-1] && !priceGT_EMA25
 
 	buyCond := kLine[len(kLine)-1] < 25 || kLine[len(kLine)-2] < 20
 	sellCond := kLine[len(kLine)-1] > 85 || kLine[len(kLine)-2] > 90
@@ -209,57 +210,13 @@ func analyseSymbol(client *futures.Client, symbol, tf string) (CoinIndicator, bo
 	switch {
 	case up && buyCond:
 		progressLogger.Printf("BUY 触发: %s %.2f", symbol, price) // 👈
-		return CoinIndicator{symbol, price, tf, kLine[len(kLine)-1], "Buy"}, true
+		return types.CoinIndicator{Symbol: symbol, Price: price, TimeInternal: tf, StochRSI: kLine[len(kLine)-1], Operation: "Buy"}, true
 	case down && sellCond:
 		progressLogger.Printf("SELL 触发: %s %.2f", symbol, price) // 👈
-		return CoinIndicator{symbol, price, tf, kLine[len(kLine)-1], "Sell"}, true
+		return types.CoinIndicator{Symbol: symbol, Price: price, TimeInternal: tf, StochRSI: kLine[len(kLine)-1], Operation: "Sell"}, true
 	default:
-		return CoinIndicator{}, false
+		return types.CoinIndicator{}, false
 	}
-}
-
-/* ====================== Telegram 推送 ====================== */
-
-func pushTelegram(results []CoinIndicator) error {
-	now := time.Now().Format("2006-01-02 15:04")
-	header := fmt.Sprintf("----15m 信号（%s）", now)
-
-	if err := telegram.SendMessage(botToken, chatID, header); err != nil {
-		return err
-	}
-	for _, r := range results {
-		volume, ok := volumeCache.Get(r.Symbol)
-		if !ok {
-			volume = 0
-		}
-		operation := r.Operation
-
-		if operation == "Buy" && volume > 300000000 {
-			msg := fmt.Sprintf("🟢%-4s %-10s SRSI:%3.1f",
-				r.Operation, r.Symbol, r.StochRSI)
-			if err := telegram.SendMessage(botToken, chatID, msg); err != nil {
-				return err
-			}
-		} else if operation == "Sell" && volume > 50000000 {
-			msg := fmt.Sprintf("🔴%-4s %-10s SRSI:%3.1f",
-				r.Operation, r.Symbol, r.StochRSI)
-			if err := telegram.SendMessage(botToken, chatID, msg); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-/* ====================== 工具函数 ====================== */
-
-func inSlip(sym string) bool {
-	for _, s := range slipCoin {
-		if s == sym {
-			return true
-		}
-	}
-	return false
 }
 
 func setHTTPClient(c *futures.Client) {
