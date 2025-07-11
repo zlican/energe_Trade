@@ -7,6 +7,7 @@ import (
 	"energe/model"
 	"energe/types"
 	"energe/utils"
+	"fmt"
 	"log"
 	"net/http"
 	"net/url"
@@ -29,13 +30,16 @@ var (
 	proxyURL    = "http://127.0.0.1:10809"
 	klinesCount = 200
 	maxWorkers  = 20
-	limitVolume = 50000000 // 3 亿 USDT
+	limitVolume = 300000000 // 3 亿 USDT
 	botToken    = "8040107823:AAHC_qu5cguJf9BG4NDiUB_nwpgF-bPkJAg"
 	chatID      = "6074996357"
 
 	// volumeMap      = map[string]float64{}
-	volumeCache    *types.VolumeCache
-	slipCoin       = []string{"XRPUSDT", "DOGEUSDT", "1000PEPEUSDT", "ADAUSDT", "BNBUSDT"} // 想排除的币放这里
+	volumeCache *types.VolumeCache
+	err         error
+	slipCoin    = []string{"XRPUSDT", "DOGEUSDT", "1000PEPEUSDT", "ADAUSDT", "BNBUSDT", "UNIUSDT", "TRUMPUSDT",
+		"LINKUSDT", "FARTCOINUSDT", "1000BONKUSDT", "AAVEUSDT", "AVAXUSDT", "SUIUSDT", "LTCUSDT",
+		"SEIUSDT", "BCHUSDT", "WIFUSDT", "XLMUSDT", "XRPUSDC", "BNXUSDT", "ETHUSDC", "BTCUSDC", "SOLUSDC"} // 想排除的币放这里
 	muVolumeMap    sync.Mutex
 	progressLogger = log.New(os.Stdout, "[Screener] ", log.LstdFlags)
 	db             *sql.DB
@@ -49,13 +53,8 @@ func main() {
 	client := binance.NewFuturesClient(apiKey, secretKey)
 	setHTTPClient(client)
 
-	exchangeInfo, err := client.NewExchangeInfoService().Do(context.Background())
-	if err != nil {
-		log.Fatalf("获取交易所信息失败: %v", err)
-	}
-
 	// 创建并预热 VolumeCache
-	volumeCache, err = utils.NewVolumeCache(client)
+	volumeCache, err = utils.NewVolumeCache(client, slipCoin, float64(limitVolume))
 	if err != nil {
 		log.Fatalf("VolumeCache 启动失败: %v", err)
 	}
@@ -64,12 +63,16 @@ func main() {
 	log.Println("volumeCache 启动成功")
 	defer volumeCache.Close()
 
+	fmt.Println(volumeCache.SymbolsAbove(float64(limitVolume)))
+
 	model.InitDB()
 	db = model.DB
 
 	// 立即执行一次
-	utils.Update1hEMA50ToDB(client, db, float64(limitVolume), klinesCount, volumeCache, slipCoin)
-	if err := runScan(client, exchangeInfo); err != nil {
+	utils.Update1hEMA25ToDB(client, db, float64(limitVolume), klinesCount, volumeCache, slipCoin)
+	utils.Update15MEMAToDB(client, db, float64(limitVolume), klinesCount, volumeCache, slipCoin)
+	utils.Update5MEMAToDB(client, db, float64(limitVolume), klinesCount, volumeCache, slipCoin)
+	if err := runScan(client); err != nil {
 		progressLogger.Printf("首次 scan 出错: %v", err)
 	}
 
@@ -83,31 +86,40 @@ func main() {
 		hour := now.Hour()
 
 		if minute == 0 {
-			progressLogger.Printf("整点 %02d:00，执行 Update1hEMA50ToDB", hour)
-			go utils.Update1hEMA50ToDB(client, db, float64(limitVolume), klinesCount, volumeCache, slipCoin)
+			time.Sleep(10 * time.Second)
+			progressLogger.Printf("整点 %02d:00，执行 Update1hEMA25ToDB", hour)
+			go utils.Update1hEMA25ToDB(client, db, float64(limitVolume), klinesCount, volumeCache, slipCoin)
 		}
+
 		if minute%15 == 0 {
-			progressLogger.Printf("每15分钟触发，执行 runScan (%02d:%02d)", hour, minute)
-			if err := runScan(client, exchangeInfo); err != nil {
+			time.Sleep(10 * time.Second)
+			progressLogger.Printf("每15分钟触发，执行 Update15MEMAToDB", hour)
+			go utils.Update15MEMAToDB(client, db, float64(limitVolume), klinesCount, volumeCache, slipCoin)
+
+			//这里进行监控扫描，二级市场
+			if err := runScan(client); err != nil {
 				progressLogger.Printf("周期 scan 出错: %v", err)
 			}
 			time.Sleep(1 * time.Minute)
+		}
+
+		if minute%5 == 0 {
+			time.Sleep(10 * time.Second)
+			progressLogger.Printf("每5分钟触发，执行 runScan (%02d:%02d)", hour, minute)
+			go utils.Update5MEMAToDB(client, db, float64(limitVolume), klinesCount, volumeCache, slipCoin)
+
 		}
 	}
 }
 
 /* ====================== 核心扫描 ====================== */
 
-func runScan(client *futures.Client, exchangeInfo *futures.ExchangeInfo) error {
+func runScan(client *futures.Client) error {
 	progressLogger.Println("开始新一轮扫描...")
 
 	// ---------- 1. 过滤 USDT 交易对 ----------
 	var symbols []string
-	for _, s := range exchangeInfo.Symbols {
-		if s.QuoteAsset == "USDT" && s.Status == "TRADING" {
-			symbols = append(symbols, s.Symbol)
-		}
-	}
+	symbols = volumeCache.SymbolsAbove(float64(limitVolume))
 	progressLogger.Printf("USDT 交易对数量: %d", len(symbols))
 
 	// ---------- 3. 并发处理 ----------
@@ -119,13 +131,6 @@ func runScan(client *futures.Client, exchangeInfo *futures.ExchangeInfo) error {
 	)
 
 	for _, symbol := range symbols {
-		if vol, ok := volumeCache.Get(symbol); !ok || vol < float64(limitVolume) {
-			continue
-		}
-		if utils.IsSlipCoin(symbol, slipCoin) {
-			continue
-		}
-
 		if err := sem.Acquire(context.Background(), 1); err != nil {
 			progressLogger.Printf("semaphore acquire 失败: %v", err)
 			continue
@@ -136,7 +141,7 @@ func runScan(client *futures.Client, exchangeInfo *futures.ExchangeInfo) error {
 			defer wg.Done()
 			defer sem.Release(1)
 
-			ind, ok := analyseSymbol(client, sym, "15m")
+			ind, ok := analyseSymbol(client, sym, "15m", db)
 			if ok {
 				resMu.Lock()
 				results = append(results, ind)
@@ -152,13 +157,12 @@ func runScan(client *futures.Client, exchangeInfo *futures.ExchangeInfo) error {
 	})
 
 	// ---------- 4. 推送到 Telegram ----------
-	return utils.PushTelegram(results, botToken, chatID, volumeCache)
+	return utils.PushTelegram(results, botToken, chatID, volumeCache, db)
 }
 
 /* ====================== 单币分析 ====================== */
 
-func analyseSymbol(client *futures.Client, symbol, tf string) (types.CoinIndicator, bool) {
-
+func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB) (types.CoinIndicator, bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 7*time.Second)
 	defer cancel()
 
@@ -200,23 +204,23 @@ func analyseSymbol(client *futures.Client, symbol, tf string) (types.CoinIndicat
 		closes[i] = c
 	}
 
-	ema25 := utils.CalculateEMA(closes, 25)
-	ema50 := utils.CalculateEMA(closes, 50)
+	price := closes[len(closes)-1]
+	ema25M15, ema50M15 := utils.Get15MEMAFromDB(db, symbol)
+	ema25M5, ema50M5 := utils.Get5MEMAFromDB(db, symbol)
 	_, kLine, _ := utils.StochRSIFromClose(closes, 14, 14, 3, 3)
+	priceGT_EMA25 := utils.GetPriceGT_EMA25FromDB(db, symbol)
 
-	// --- 如果是 BTCUSDT，打印最近 20 个 StochRSI ---
-	if symbol == "BTCUSDT" && len(kLine) >= 20 {
-		last20 := kLine[len(kLine)-20:]
-		progressLogger.Printf("BTCUSDT 最近20个 StochRSI: %v", last20) // 👈
+	var up, down bool
+	if symbol == "BTCUSDT" {
+		up = ema25M15 > ema50M15 && priceGT_EMA25
+		down = ema25M15 < ema50M15 && !priceGT_EMA25
+	} else {
+		up = ema25M5 > ema50M5 && priceGT_EMA25 && ema25M5 > ema50M5
+		down = ema25M5 < ema50M5 && !priceGT_EMA25 && ema25M5 < ema50M5
 	}
 
-	price := closes[len(closes)-1]
-	priceGT_EMA25 := utils.GetPriceGT_EMA25FromDB(db, symbol)
-	up := ema25[len(ema25)-1] > ema50[len(ema50)-1] && priceGT_EMA25
-	down := ema25[len(ema25)-1] < ema50[len(ema50)-1] && !priceGT_EMA25
-
 	buyCond := kLine[len(kLine)-1] < 25 || kLine[len(kLine)-2] < 20
-	sellCond := kLine[len(kLine)-1] > 85 || kLine[len(kLine)-2] > 90
+	sellCond := kLine[len(kLine)-1] > 75 || kLine[len(kLine)-2] > 80
 
 	switch {
 	case up && buyCond:

@@ -3,6 +3,7 @@ package types
 import (
 	"log"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -11,10 +12,12 @@ import (
 
 // VolumeCache 通过单条 WS 链接实时维护 24 h QuoteVolume。
 type VolumeCache struct {
-	M         sync.Map
-	Stop      chan struct{}
-	ReadyOnce sync.Once     // 首次推送到达的保护
-	ReadyCh   chan struct{} // 外部等待用
+	M           sync.Map
+	Stop        chan struct{}
+	ReadyOnce   sync.Once     // 首次推送到达的保护
+	ReadyCh     chan struct{} // 外部等待用
+	SlipCoin    []string      // ✅ 用 map 快速判断是否是 slipCoin
+	LimitVolume float64       // ✅ volume 下限
 }
 
 // loop: 建立 / 监听 WS；断线后自动重连。
@@ -26,7 +29,19 @@ func (vc *VolumeCache) Loop() {
 				vc.ReadyOnce.Do(func() { close(vc.ReadyCh) })
 
 				for _, t := range ev {
+					// ✅ 滑点币种过滤
+					if isSlipCoin(t.Symbol, vc.SlipCoin) {
+						continue
+					}
+					// ✅ 只处理 USDT 对
+					if !strings.HasSuffix(t.Symbol, "USDT") {
+						continue
+					}
+					// ✅ volume 过滤
 					if v, err := strconv.ParseFloat(t.QuoteVolume, 64); err == nil {
+						if v < vc.LimitVolume {
+							continue
+						}
 						vc.M.Store(t.Symbol, v)
 					}
 				}
@@ -77,4 +92,13 @@ func (vc *VolumeCache) SymbolsAbove(limit float64) []string {
 		return true
 	})
 	return result
+}
+
+func isSlipCoin(sym string, slipCoin []string) bool {
+	for _, s := range slipCoin {
+		if s == sym {
+			return true
+		}
+	}
+	return false
 }
