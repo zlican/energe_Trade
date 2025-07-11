@@ -50,7 +50,9 @@ func PushTelegram(results []types.CoinIndicator, botToken, chatID string, volume
 
 		if operation == "Buy" && volume > 300000000 {
 			if r.Symbol == "BTCUSDT" {
-				msg = fmt.Sprintf("🔥%-4s %-10s SRSI:%3.1f", r.Operation, r.Symbol, r.StochRSI)
+				msg = fmt.Sprintf("💎%-4s %-10s SRSI:%3.1f", r.Operation, r.Symbol, r.StochRSI)
+			} else if r.Symbol == "ETHUSDT" || r.Symbol == "SOLUSDT" || r.Symbol == "HYPEUSDT" {
+				msg = fmt.Sprintf("🌟%-4s %-10s SRSI:%3.1f", r.Operation, r.Symbol, r.StochRSI)
 			} else {
 				msg = fmt.Sprintf("🟢%-4s %-10s SRSI:%3.1f", r.Operation, r.Symbol, r.StochRSI)
 			}
@@ -59,7 +61,9 @@ func PushTelegram(results []types.CoinIndicator, botToken, chatID string, volume
 				continue
 			}
 			if r.Symbol == "BTCUSDT" {
-				msg = fmt.Sprintf("🔥%-4s %-10s SRSI:%3.1f", r.Operation, r.Symbol, r.StochRSI)
+				msg = fmt.Sprintf("💎%-4s %-10s SRSI:%3.1f", r.Operation, r.Symbol, r.StochRSI)
+			} else if r.Symbol == "ETHUSDT" || r.Symbol == "SOLUSDT" || r.Symbol == "HYPEUSDT" {
+				msg = fmt.Sprintf("🌟%-4s %-10s SRSI:%3.1f", r.Operation, r.Symbol, r.StochRSI)
 			} else {
 				msg = fmt.Sprintf("🔴%-4s %-10s SRSI:%3.1f", r.Operation, r.Symbol, r.StochRSI)
 			}

@@ -121,7 +121,6 @@ func runScan(client *futures.Client) error {
 	var symbols []string
 	symbols = volumeCache.SymbolsAbove(float64(limitVolume))
 	progressLogger.Printf("USDT 交易对数量: %d", len(symbols))
-
 	// ---------- 3. 并发处理 ----------
 	var (
 		results []types.CoinIndicator
@@ -150,7 +149,33 @@ func runScan(client *futures.Client) error {
 		}(symbol)
 	}
 	wg.Wait()
-	progressLogger.Printf("本轮符合条件标的数量: %d", len(results))
+
+	// --------- 过滤逻辑：优先级保留 ---------
+	prioritySymbols := []string{"BTCUSDT", "ETHUSDT", "SOLUSDT", "HYPEUSDT"}
+	symbolSet := make(map[string]types.CoinIndicator)
+	for _, r := range results {
+		symbolSet[r.Symbol] = r
+	}
+
+	var filteredResults []types.CoinIndicator
+
+	// 优先保留 BTCUSDT
+	if ind, ok := symbolSet["BTCUSDT"]; ok {
+		filteredResults = []types.CoinIndicator{ind}
+	} else {
+		// 否则保留其他主流币
+		for _, sym := range prioritySymbols[1:] {
+			if ind, ok := symbolSet[sym]; ok {
+				filteredResults = append(filteredResults, ind)
+			}
+		}
+		// 如果四大主流币都没有，才保留全部动能币
+		if len(filteredResults) == 0 {
+			filteredResults = results
+		}
+	}
+
+	progressLogger.Printf("本轮符合条件标的数量: %d", len(filteredResults))
 
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].StochRSI > results[j].StochRSI // “>” 表示降序
