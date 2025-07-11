@@ -175,6 +175,8 @@ func runScan(client *futures.Client) error {
 		}
 	}
 
+	results = filteredResults
+
 	progressLogger.Printf("本轮符合条件标的数量: %d", len(filteredResults))
 
 	sort.Slice(results, func(i, j int) bool {
@@ -247,13 +249,50 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB) (types
 	buyCond := kLine[len(kLine)-1] < 25 || kLine[len(kLine)-2] < 20
 	sellCond := kLine[len(kLine)-1] > 75 || kLine[len(kLine)-2] > 80
 
+	var status string
+	var SmallEMA25, SmallEMA50 float64
 	switch {
 	case up && buyCond:
 		progressLogger.Printf("BUY 触发: %s %.2f", symbol, price) // 👈
-		return types.CoinIndicator{Symbol: symbol, Price: price, TimeInternal: tf, StochRSI: kLine[len(kLine)-1], Operation: "Buy"}, true
+		if symbol == "BTCUSDT" || symbol == "ETHUSDT" || symbol == "SOLUSDT" || symbol == "HYPEUSDT" {
+			SmallEMA25, SmallEMA50 = utils.Get5MEMAFromDB(db, symbol) //四大对5分钟进行判断
+			if SmallEMA25 > SmallEMA50 {
+				status = "Soon"
+			} else if SmallEMA25 < SmallEMA50 && price > SmallEMA25 {
+				status = "View"
+			} else if SmallEMA25 < SmallEMA50 && price < SmallEMA25 {
+				status = "Wait"
+			} else {
+				status = "None"
+			}
+		} else {
+			SmallEMA25, SmallEMA50 = utils.Get1MEMA(client, klinesCount, symbol) //动能币对1分钟进行判断
+			if SmallEMA25 > SmallEMA50 {
+				status = "Soon"
+			} else if SmallEMA25 < SmallEMA50 && price > SmallEMA25 {
+				status = "View"
+			} else if SmallEMA25 < SmallEMA50 && price < SmallEMA25 {
+				status = "Wait"
+			} else {
+				status = "None"
+			}
+		}
+
+		return types.CoinIndicator{
+			Symbol:       symbol,
+			Price:        price,
+			TimeInternal: tf,
+			StochRSI:     kLine[len(kLine)-1],
+			Status:       status,
+			Operation:    "Buy"}, true
 	case down && sellCond:
 		progressLogger.Printf("SELL 触发: %s %.2f", symbol, price) // 👈
-		return types.CoinIndicator{Symbol: symbol, Price: price, TimeInternal: tf, StochRSI: kLine[len(kLine)-1], Operation: "Sell"}, true
+		return types.CoinIndicator{
+			Symbol:       symbol,
+			Price:        price,
+			TimeInternal: tf,
+			StochRSI:     kLine[len(kLine)-1],
+			Operation:    "Sell"}, true
 	default:
 		return types.CoinIndicator{}, false
 	}
