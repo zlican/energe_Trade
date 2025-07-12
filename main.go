@@ -30,7 +30,7 @@ var (
 	proxyURL    = "http://127.0.0.1:10809"
 	klinesCount = 200
 	maxWorkers  = 20
-	limitVolume = 300000000 // 3 亿 USDT
+	limitVolume = 200000000 // 2 亿 USDT
 	botToken    = "8040107823:AAHC_qu5cguJf9BG4NDiUB_nwpgF-bPkJAg"
 	chatID      = "6074996357"
 
@@ -39,7 +39,9 @@ var (
 	err         error
 	slipCoin    = []string{"XRPUSDT", "DOGEUSDT", "1000PEPEUSDT", "ADAUSDT", "BNBUSDT", "UNIUSDT", "TRUMPUSDT",
 		"LINKUSDT", "FARTCOINUSDT", "1000BONKUSDT", "AAVEUSDT", "AVAXUSDT", "SUIUSDT", "LTCUSDT",
-		"SEIUSDT", "BCHUSDT", "WIFUSDT", "XLMUSDT", "XRPUSDC", "BNXUSDT", "ETHUSDC", "BTCUSDC", "SOLUSDC"} // 想排除的币放这里
+		"SEIUSDT", "BCHUSDT", "WIFUSDT", "XLMUSDT", "XRPUSDC", "BNXUSDT", "ETHUSDC", "BTCUSDC", "SOLUSDC",
+		"DOTUSDT", "NEARUSDT", "ARBUSDT", "1000SHIBUSDT", "WLDUSDT", "TIAUSDT",
+		"HBARUSDT", "VIRTUALUSDT"} // 想排除的币放这里
 	muVolumeMap    sync.Mutex
 	progressLogger = log.New(os.Stdout, "[Screener] ", log.LstdFlags)
 	db             *sql.DB
@@ -96,17 +98,18 @@ func main() {
 			progressLogger.Printf("每15分钟触发，执行 Update15MEMAToDB", hour)
 			go utils.Update15MEMAToDB(client, db, float64(limitVolume), klinesCount, volumeCache, slipCoin)
 
-			//这里进行监控扫描，二级市场
-			if err := runScan(client); err != nil {
-				progressLogger.Printf("周期 scan 出错: %v", err)
-			}
-			time.Sleep(1 * time.Minute)
 		}
 
 		if minute%5 == 0 {
 			time.Sleep(10 * time.Second)
 			progressLogger.Printf("每5分钟触发，执行 runScan (%02d:%02d)", hour, minute)
 			go utils.Update5MEMAToDB(client, db, float64(limitVolume), klinesCount, volumeCache, slipCoin)
+
+			//这里进行监控扫描，二级市场
+			if err := runScan(client); err != nil {
+				progressLogger.Printf("周期 scan 出错: %v", err)
+			}
+			time.Sleep(1 * time.Minute)
 
 		}
 	}
@@ -150,8 +153,6 @@ func runScan(client *futures.Client) error {
 	}
 	wg.Wait()
 
-	// --------- 过滤逻辑：优先级保留 ---------
-	prioritySymbols := []string{"BTCUSDT", "ETHUSDT", "SOLUSDT", "HYPEUSDT"}
 	symbolSet := make(map[string]types.CoinIndicator)
 	for _, r := range results {
 		symbolSet[r.Symbol] = r
@@ -163,16 +164,7 @@ func runScan(client *futures.Client) error {
 	if ind, ok := symbolSet["BTCUSDT"]; ok {
 		filteredResults = []types.CoinIndicator{ind}
 	} else {
-		// 否则保留其他主流币
-		for _, sym := range prioritySymbols[1:] {
-			if ind, ok := symbolSet[sym]; ok {
-				filteredResults = append(filteredResults, ind)
-			}
-		}
-		// 如果四大主流币都没有，才保留全部动能币
-		if len(filteredResults) == 0 {
-			filteredResults = results
-		}
+		filteredResults = results
 	}
 
 	results = filteredResults
@@ -234,7 +226,7 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB) (types
 	price := closes[len(closes)-1]
 	ema25M15, ema50M15 := utils.Get15MEMAFromDB(db, symbol)
 	ema25M5, ema50M5 := utils.Get5MEMAFromDB(db, symbol)
-	_, kLine, _ := utils.StochRSIFromClose(closes, 14, 14, 3, 3)
+	//_, kLine, _ := utils.StochRSIFromClose(closes, 14, 14, 3, 3)
 	priceGT_EMA25 := utils.GetPriceGT_EMA25FromDB(db, symbol) //1H 价格在25EMA上方
 
 	var up, down bool
@@ -246,8 +238,15 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB) (types
 		down = ema25M15 < ema50M15 && ema25M5 < ema50M5 //15分钟在下+5分钟在下
 	}
 
-	buyCond := kLine[len(kLine)-1] < 25 || kLine[len(kLine)-2] < 20
-	sellCond := kLine[len(kLine)-1] > 75 || kLine[len(kLine)-2] > 80
+	var srsi float64
+	if symbol == "BTCUSDT" || symbol == "ETHUSDT" || symbol == "SOLUSDT" || symbol == "HYPEUSDT" {
+		srsi = utils.Get15SRSIFromDB(db, symbol)
+	} else {
+		srsi = utils.Get5SRSIFromDB(db, symbol)
+	}
+
+	buyCond := srsi < 25 || srsi < 20
+	sellCond := srsi > 75 || srsi > 80
 
 	var status string
 	var SmallEMA25, SmallEMA50 float64
@@ -256,48 +255,48 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB) (types
 		progressLogger.Printf("BUY 触发: %s %.2f", symbol, price) // 👈
 		if symbol == "BTCUSDT" || symbol == "ETHUSDT" || symbol == "SOLUSDT" || symbol == "HYPEUSDT" {
 			SmallEMA25, SmallEMA50 = utils.Get5MEMAFromDB(db, symbol) //四大对5分钟进行判断
-			if SmallEMA25 > SmallEMA50 {
+			if SmallEMA25 > SmallEMA50 && price > SmallEMA50 {
 				status = "Soon"
 			} else {
-				status = "View"
+				status = "Wait"
 			}
 		} else {
 			SmallEMA25, SmallEMA50 = utils.Get1MEMA(client, klinesCount, symbol) //动能币对1分钟进行判断
-			if SmallEMA25 > SmallEMA50 {
+			if SmallEMA25 > SmallEMA50 && price > SmallEMA50 {
 				status = "Soon"
 			} else {
-				status = "View"
+				status = "Wait"
 			}
 		}
 		return types.CoinIndicator{
 			Symbol:       symbol,
 			Price:        price,
 			TimeInternal: tf,
-			StochRSI:     kLine[len(kLine)-1],
+			StochRSI:     srsi,
 			Status:       status,
 			Operation:    "Buy"}, true
 	case down && sellCond:
 		progressLogger.Printf("SELL 触发: %s %.2f", symbol, price) // 👈
 		if symbol == "BTCUSDT" || symbol == "ETHUSDT" || symbol == "SOLUSDT" || symbol == "HYPEUSDT" {
 			SmallEMA25, SmallEMA50 = utils.Get5MEMAFromDB(db, symbol) //四大对5分钟进行判断
-			if SmallEMA25 < SmallEMA50 {
+			if SmallEMA25 < SmallEMA50 && price < SmallEMA50 {
 				status = "Soon"
 			} else {
-				status = "View"
+				status = "Wait"
 			}
 		} else {
 			SmallEMA25, SmallEMA50 = utils.Get1MEMA(client, klinesCount, symbol) //动能币对1分钟进行判断
-			if SmallEMA25 < SmallEMA50 {
+			if SmallEMA25 < SmallEMA50 && price < SmallEMA50 {
 				status = "Soon"
 			} else {
-				status = "View"
+				status = "Wait"
 			}
 		}
 		return types.CoinIndicator{
 			Symbol:       symbol,
 			Price:        price,
 			TimeInternal: tf,
-			StochRSI:     kLine[len(kLine)-1],
+			StochRSI:     srsi,
 			Status:       status,
 			Operation:    "Sell"}, true
 	default:
