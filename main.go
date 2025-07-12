@@ -13,7 +13,6 @@ import (
 	"net/url"
 	"os"
 	"sort"
-	"strconv"
 	"sync"
 	"time"
 
@@ -25,14 +24,15 @@ import (
 /* ====================== 结构体 & 全局 ====================== */
 
 var (
-	apiKey      = ""
-	secretKey   = ""
-	proxyURL    = "http://127.0.0.1:10809"
-	klinesCount = 200
-	maxWorkers  = 20
-	limitVolume = 200000000 // 2 亿 USDT
-	botToken    = "8040107823:AAHC_qu5cguJf9BG4NDiUB_nwpgF-bPkJAg"
-	chatID      = "6074996357"
+	apiKey               = ""
+	secretKey            = ""
+	proxyURL             = "http://127.0.0.1:10809"
+	klinesCount          = 200
+	maxWorkers           = 20
+	limitVolume          = 200000000 // 2 亿 USDT
+	botToken             = "8040107823:AAHC_qu5cguJf9BG4NDiUB_nwpgF-bPkJAg"
+	wait_energe_botToken = "7381664741:AAEmhhEhsq8nBgThtsOfVklNb6q4TjvI_Og"
+	chatID               = "6074996357"
 
 	// volumeMap      = map[string]float64{}
 	volumeCache *types.VolumeCache
@@ -45,6 +45,7 @@ var (
 	muVolumeMap    sync.Mutex
 	progressLogger = log.New(os.Stdout, "[Screener] ", log.LstdFlags)
 	db             *sql.DB
+	waitChan       = make(chan []types.CoinIndicator, 30) //等待区
 )
 
 /* ====================== 主函数 ====================== */
@@ -77,6 +78,9 @@ func main() {
 	if err := runScan(client); err != nil {
 		progressLogger.Printf("首次 scan 出错: %v", err)
 	}
+
+	//开启等待区
+	go utils.WaitEnerge(waitChan, db, wait_energe_botToken, chatID, client, klinesCount)
 
 	for {
 		now := time.Now()
@@ -153,23 +157,26 @@ func runScan(client *futures.Client) error {
 	}
 	wg.Wait()
 
-	symbolSet := make(map[string]types.CoinIndicator)
-	for _, r := range results {
-		symbolSet[r.Symbol] = r
-	}
+	//取消层级压制
+	/* 	symbolSet := make(map[string]types.CoinIndicator)
+	   	for _, r := range results {
+	   		symbolSet[r.Symbol] = r
+	   	}
 
-	var filteredResults []types.CoinIndicator
+	   	var filteredResults []types.CoinIndicator
 
-	// 优先保留 BTCUSDT
-	if ind, ok := symbolSet["BTCUSDT"]; ok {
-		filteredResults = []types.CoinIndicator{ind}
-	} else {
-		filteredResults = results
-	}
+	   	// 优先保留 BTCUSDT
+	   	if ind, ok := symbolSet["BTCUSDT"]; ok {
+	   		filteredResults = []types.CoinIndicator{ind}
+	   	} else {
+	   		filteredResults = results
+	   	}
 
-	results = filteredResults
+		results = filteredResults
+	*/
+	waitChan <- results //将一次runScan的数据推送给等待区
 
-	progressLogger.Printf("本轮符合条件标的数量: %d", len(filteredResults))
+	progressLogger.Printf("本轮符合条件标的数量: %d", len(results))
 
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].StochRSI > results[j].StochRSI // “>” 表示降序
@@ -182,45 +189,10 @@ func runScan(client *futures.Client) error {
 /* ====================== 单币分析 ====================== */
 
 func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB) (types.CoinIndicator, bool) {
-	ctx, cancel := context.WithTimeout(context.Background(), 7*time.Second)
-	defer cancel()
 
-	const maxRetries = 2
-
-	var (
-		klines []*futures.Kline
-		err    error
-	)
-
-	// 最多尝试 3 次
-	for attempt := 1; attempt <= maxRetries; attempt++ {
-		klines, err = client.NewKlinesService().
-			Symbol(symbol).Interval(tf).
-			Limit(klinesCount).Do(ctx)
-
-		// 拉取成功且数量够用，直接跳出循环
-		if err == nil && len(klines) >= 35 {
-			break
-		}
-
-		// 记录本次失败
-		progressLogger.Printf("第 %d 次拉取 %s K 线失败: %v", attempt, symbol, err)
-
-		// 如果还没到最后一次，可以选择短暂等待再试（可按需调整或使用指数退避）
-		if attempt < maxRetries {
-			time.Sleep(time.Second)
-		}
-	}
-
-	// 若三次仍失败或数量不足，返回失败标记
-	if err != nil || len(klines) < 35 {
+	_, closes, err := utils.GetKlinesByAPI(client, symbol, tf, klinesCount)
+	if err != nil {
 		return types.CoinIndicator{}, false
-	}
-
-	closes := make([]float64, len(klines))
-	for i, k := range klines {
-		c, _ := strconv.ParseFloat(k.Close, 64)
-		closes[i] = c
 	}
 
 	price := closes[len(closes)-1]
