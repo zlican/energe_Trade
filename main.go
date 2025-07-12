@@ -235,15 +235,15 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB) (types
 	ema25M15, ema50M15 := utils.Get15MEMAFromDB(db, symbol)
 	ema25M5, ema50M5 := utils.Get5MEMAFromDB(db, symbol)
 	_, kLine, _ := utils.StochRSIFromClose(closes, 14, 14, 3, 3)
-	priceGT_EMA25 := utils.GetPriceGT_EMA25FromDB(db, symbol)
+	priceGT_EMA25 := utils.GetPriceGT_EMA25FromDB(db, symbol) //1H 价格在25EMA上方
 
 	var up, down bool
-	if symbol == "BTCUSDT" {
-		up = ema25M15 > ema50M15 && priceGT_EMA25
-		down = ema25M15 < ema50M15 && !priceGT_EMA25
+	if symbol == "BTCUSDT" || symbol == "ETHUSDT" || symbol == "SOLUSDT" || symbol == "HYPEUSDT" {
+		up = priceGT_EMA25 && ema25M15 > ema50M15    //1H GT +15分钟在上
+		down = !priceGT_EMA25 && ema25M15 < ema50M15 //1H !GT + 15分钟在下
 	} else {
-		up = ema25M5 > ema50M5 && priceGT_EMA25 && ema25M5 > ema50M5
-		down = ema25M5 < ema50M5 && !priceGT_EMA25 && ema25M5 < ema50M5
+		up = ema25M15 > ema50M15 && ema25M5 > ema50M5   //15分钟在上+5分钟在上
+		down = ema25M15 < ema50M15 && ema25M5 < ema50M5 //15分钟在下+5分钟在下
 	}
 
 	buyCond := kLine[len(kLine)-1] < 25 || kLine[len(kLine)-2] < 20
@@ -258,26 +258,17 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB) (types
 			SmallEMA25, SmallEMA50 = utils.Get5MEMAFromDB(db, symbol) //四大对5分钟进行判断
 			if SmallEMA25 > SmallEMA50 {
 				status = "Soon"
-			} else if SmallEMA25 < SmallEMA50 && price > SmallEMA25 {
-				status = "View"
-			} else if SmallEMA25 < SmallEMA50 && price < SmallEMA25 {
-				status = "Wait"
 			} else {
-				status = "None"
+				status = "View"
 			}
 		} else {
 			SmallEMA25, SmallEMA50 = utils.Get1MEMA(client, klinesCount, symbol) //动能币对1分钟进行判断
 			if SmallEMA25 > SmallEMA50 {
 				status = "Soon"
-			} else if SmallEMA25 < SmallEMA50 && price > SmallEMA25 {
-				status = "View"
-			} else if SmallEMA25 < SmallEMA50 && price < SmallEMA25 {
-				status = "Wait"
 			} else {
-				status = "None"
+				status = "View"
 			}
 		}
-
 		return types.CoinIndicator{
 			Symbol:       symbol,
 			Price:        price,
@@ -287,11 +278,27 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB) (types
 			Operation:    "Buy"}, true
 	case down && sellCond:
 		progressLogger.Printf("SELL 触发: %s %.2f", symbol, price) // 👈
+		if symbol == "BTCUSDT" || symbol == "ETHUSDT" || symbol == "SOLUSDT" || symbol == "HYPEUSDT" {
+			SmallEMA25, SmallEMA50 = utils.Get5MEMAFromDB(db, symbol) //四大对5分钟进行判断
+			if SmallEMA25 < SmallEMA50 {
+				status = "Soon"
+			} else {
+				status = "View"
+			}
+		} else {
+			SmallEMA25, SmallEMA50 = utils.Get1MEMA(client, klinesCount, symbol) //动能币对1分钟进行判断
+			if SmallEMA25 < SmallEMA50 {
+				status = "Soon"
+			} else {
+				status = "View"
+			}
+		}
 		return types.CoinIndicator{
 			Symbol:       symbol,
 			Price:        price,
 			TimeInternal: tf,
 			StochRSI:     kLine[len(kLine)-1],
+			Status:       status,
 			Operation:    "Sell"}, true
 	default:
 		return types.CoinIndicator{}, false

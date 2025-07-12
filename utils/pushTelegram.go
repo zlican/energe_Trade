@@ -35,10 +35,7 @@ func PushTelegram(results []types.CoinIndicator, botToken, chatID string, volume
 		Trend15M = "震荡"
 	}
 
-	trend := fmt.Sprintf("趋势：1H（%s）15M（%s）", Trend1H, Trend15M)
-	if err := sendWithRetry(botToken, chatID, trend); err != nil {
-		log.Printf("发送 trend 消息失败: %v", err)
-	}
+	trend := fmt.Sprintf("四大趋势：1H（%s）15M（%s）", Trend1H, Trend15M)
 
 	for _, r := range results {
 		volume, ok := volumeCache.Get(r.Symbol)
@@ -57,15 +54,12 @@ func PushTelegram(results []types.CoinIndicator, botToken, chatID string, volume
 				msg = fmt.Sprintf("🟢%-4s %-10s (%4s)", r.Operation, r.Symbol, r.Status)
 			}
 		} else if operation == "Sell" && volume > 300000000 {
-			if gt {
-				continue
-			}
 			if r.Symbol == "BTCUSDT" {
-				msg = fmt.Sprintf("💎%-4s %-10s SRSI:%3.1f", r.Operation, r.Symbol, r.StochRSI)
+				msg = fmt.Sprintf("💎%-4s %-10s SRSI:%3.1f %-4s", r.Operation, r.Symbol, r.StochRSI, r.Status)
 			} else if r.Symbol == "ETHUSDT" || r.Symbol == "SOLUSDT" || r.Symbol == "HYPEUSDT" {
-				msg = fmt.Sprintf("🌟%-4s %-10s SRSI:%3.1f", r.Operation, r.Symbol, r.StochRSI)
+				msg = fmt.Sprintf("🌟%-4s %-10s SRSI:%3.1f %-4s", r.Operation, r.Symbol, r.StochRSI, r.Status)
 			} else {
-				msg = fmt.Sprintf("🔴%-4s %-10s SRSI:%3.1f", r.Operation, r.Symbol, r.StochRSI)
+				msg = fmt.Sprintf("🔴%-4s %-10s SRSI:%3.1f %-4s", r.Operation, r.Symbol, r.StochRSI, r.Status)
 			}
 		} else {
 			continue // 不满足推送条件
@@ -77,8 +71,8 @@ func PushTelegram(results []types.CoinIndicator, botToken, chatID string, volume
 		}
 	}
 
-	if err := sendWithRetry(botToken, chatID, "END          "); err != nil {
-		log.Printf("发送结束标记失败: %v", err)
+	if err := sendWithRetry(botToken, chatID, trend); err != nil {
+		log.Printf("发送 trend 消息失败: %v", err)
 	}
 
 	return nil
