@@ -29,7 +29,7 @@ var (
 	proxyURL             = "http://127.0.0.1:10809"
 	klinesCount          = 200
 	maxWorkers           = 20
-	limitVolume          = 200000000 // 2 亿 USDT
+	limitVolume          = 100000000 // 1亿 USDT
 	botToken             = "8040107823:AAHC_qu5cguJf9BG4NDiUB_nwpgF-bPkJAg"
 	wait_energe_botToken = "7381664741:AAEmhhEhsq8nBgThtsOfVklNb6q4TjvI_Og"
 	chatID               = "6074996357"
@@ -40,8 +40,10 @@ var (
 	slipCoin    = []string{"XRPUSDT", "DOGEUSDT", "1000PEPEUSDT", "ADAUSDT", "BNBUSDT", "UNIUSDT", "TRUMPUSDT",
 		"LINKUSDT", "FARTCOINUSDT", "1000BONKUSDT", "AAVEUSDT", "AVAXUSDT", "SUIUSDT", "LTCUSDT",
 		"SEIUSDT", "BCHUSDT", "WIFUSDT", "XLMUSDT", "XRPUSDC", "BNXUSDT", "ETHUSDC", "BTCUSDC", "SOLUSDC",
-		"DOTUSDT", "NEARUSDT", "ARBUSDT", "1000SHIBUSDT", "WLDUSDT", "TIAUSDT", "TRXUSDT", "HYPEUSDT", "PNUTUSDT",
-		"HBARUSDT", "VIRTUALUSDT", "PUMPUSDT"} // 想排除的币放这里
+		"DOTUSDT", "NEARUSDT", "ARBUSDT", "1000SHIBUSDT", "TIAUSDT", "TRXUSDT", "HYPEUSDT", "PNUTUSDT",
+		"HBARUSDT", "VIRTUALUSDT", "PUMPUSDT", "1INCHUSDT", "SUIUSDC", "1000FLOKIUSDT", "GALAUSDT",
+		"WLDUSDT", "FILUSDT", "APTUSDT", "TAOUSDT", "CRVUSDT", "FETUSDT", "INJUSDT", "1000BONKUSDC",
+		"SPXUSDT", "TONUSDT", "ETCUSDT"} // 想排除的币放这里
 	muVolumeMap    sync.Mutex
 	progressLogger = log.New(os.Stdout, "[Screener] ", log.LstdFlags)
 	db             *sql.DB
@@ -202,7 +204,7 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB) (types
 	priceGT_EMA25 := utils.GetPriceGT_EMA25FromDB(db, symbol) //1H 价格在25EMA上方
 
 	var up, down bool
-	if symbol == "BTCUSDT" || symbol == "ETHUSDT" || symbol == "SOLUSDT" || symbol == "HYPEUSDT" {
+	if symbol == "BTCUSDT" || symbol == "ETHUSDT" || symbol == "SOLUSDT" {
 		up = priceGT_EMA25 && ema25M15 > ema50M15    //1H GT +15分钟在上
 		down = !priceGT_EMA25 && ema25M15 < ema50M15 //1H !GT + 15分钟在下
 	} else {
@@ -211,7 +213,7 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB) (types
 	}
 
 	var srsi float64
-	if symbol == "BTCUSDT" || symbol == "ETHUSDT" || symbol == "SOLUSDT" || symbol == "HYPEUSDT" {
+	if symbol == "BTCUSDT" || symbol == "ETHUSDT" || symbol == "SOLUSDT" {
 		srsi = utils.Get15SRSIFromDB(db, symbol)
 	} else {
 		srsi = utils.Get5SRSIFromDB(db, symbol)
@@ -225,16 +227,16 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB) (types
 	switch {
 	case up && buyCond:
 		progressLogger.Printf("BUY 触发: %s %.2f", symbol, price) // 👈
-		if symbol == "BTCUSDT" || symbol == "ETHUSDT" || symbol == "SOLUSDT" || symbol == "HYPEUSDT" {
-			SmallEMA25, SmallEMA50 = utils.Get5MEMAFromDB(db, symbol) //四大对5分钟进行判断
-			if SmallEMA25 > SmallEMA50 && price > SmallEMA50 {
+		if symbol == "BTCUSDT" || symbol == "ETHUSDT" || symbol == "SOLUSDT" {
+			SmallEMA25, SmallEMA50 = utils.Get5MEMAFromDB(db, symbol) //三大对5分钟进行判断
+			if SmallEMA25 > SmallEMA50 && price > ema25M15 {          //(这里价格破中时黄)
 				status = "Soon"
 			} else {
 				status = "Wait"
 			}
 		} else {
 			SmallEMA25, SmallEMA50 = utils.Get1MEMA(client, klinesCount, symbol) //动能币对1分钟进行判断
-			if SmallEMA25 > SmallEMA50 && price > SmallEMA50 {
+			if SmallEMA25 > SmallEMA50 && price > ema25M5 {                      //(这里价格破中时黄)
 				status = "Soon"
 			} else {
 				status = "Wait"
@@ -249,16 +251,16 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB) (types
 			Operation:    "Buy"}, true
 	case down && sellCond:
 		progressLogger.Printf("SELL 触发: %s %.2f", symbol, price) // 👈
-		if symbol == "BTCUSDT" || symbol == "ETHUSDT" || symbol == "SOLUSDT" || symbol == "HYPEUSDT" {
-			SmallEMA25, SmallEMA50 = utils.Get5MEMAFromDB(db, symbol) //四大对5分钟进行判断
-			if SmallEMA25 < SmallEMA50 && price < SmallEMA50 {
+		if symbol == "BTCUSDT" || symbol == "ETHUSDT" || symbol == "SOLUSDT" {
+			SmallEMA25, SmallEMA50 = utils.Get5MEMAFromDB(db, symbol) //三大对5分钟进行判断
+			if SmallEMA25 < SmallEMA50 && price < ema25M15 {          //(这里价格破中时黄)
 				status = "Soon"
 			} else {
 				status = "Wait"
 			}
 		} else {
 			SmallEMA25, SmallEMA50 = utils.Get1MEMA(client, klinesCount, symbol) //动能币对1分钟进行判断
-			if SmallEMA25 < SmallEMA50 && price < SmallEMA50 {
+			if SmallEMA25 < SmallEMA50 && price < ema25M5 {                      //(这里价格破中时黄)
 				status = "Soon"
 			} else {
 				status = "Wait"

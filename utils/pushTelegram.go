@@ -24,7 +24,7 @@ func PushTelegram(results []types.CoinIndicator, botToken, chatID string, volume
 			continue
 		}
 		volume, ok := volumeCache.Get(r.Symbol)
-		if !ok || volume < 200000000 {
+		if !ok || volume < 100000000 {
 			continue
 		}
 		var msg string
