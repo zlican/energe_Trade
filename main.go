@@ -40,8 +40,8 @@ var (
 	slipCoin    = []string{"XRPUSDT", "DOGEUSDT", "1000PEPEUSDT", "ADAUSDT", "BNBUSDT", "UNIUSDT", "TRUMPUSDT",
 		"LINKUSDT", "FARTCOINUSDT", "1000BONKUSDT", "AAVEUSDT", "AVAXUSDT", "SUIUSDT", "LTCUSDT",
 		"SEIUSDT", "BCHUSDT", "WIFUSDT", "XLMUSDT", "XRPUSDC", "BNXUSDT", "ETHUSDC", "BTCUSDC", "SOLUSDC",
-		"DOTUSDT", "NEARUSDT", "ARBUSDT", "1000SHIBUSDT", "WLDUSDT", "TIAUSDT",
-		"HBARUSDT", "VIRTUALUSDT"} // 想排除的币放这里
+		"DOTUSDT", "NEARUSDT", "ARBUSDT", "1000SHIBUSDT", "WLDUSDT", "TIAUSDT", "TRXUSDT", "HYPEUSDT", "PNUTUSDT",
+		"HBARUSDT", "VIRTUALUSDT", "PUMPUSDT"} // 想排除的币放这里
 	muVolumeMap    sync.Mutex
 	progressLogger = log.New(os.Stdout, "[Screener] ", log.LstdFlags)
 	db             *sql.DB

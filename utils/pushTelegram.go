@@ -20,6 +20,13 @@ func PushTelegram(results []types.CoinIndicator, botToken, chatID string, volume
 
 	for _, r := range results {
 		operation := r.Operation
+		if r.Status == "Wait" {
+			continue
+		}
+		volume, ok := volumeCache.Get(r.Symbol)
+		if !ok || volume < 200000000 {
+			continue
+		}
 		var msg string
 
 		if operation == "Buy" {

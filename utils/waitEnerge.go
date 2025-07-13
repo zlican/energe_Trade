@@ -26,7 +26,7 @@ func WaitEnerge(resultsChan chan []types.CoinIndicator, db *sql.DB, botToken, ch
 	defer ticker.Stop()
 
 	isCoreCoin := func(sym string) bool {
-		return sym == "BTCUSDT" || sym == "ETHUSDT" || sym == "SOLUSDT" || sym == "HYPEUSDT"
+		return sym == "BTCUSDT" || sym == "ETHUSDT" || sym == "SOLUSDT"
 	}
 
 	for {
@@ -55,7 +55,9 @@ func WaitEnerge(resultsChan chan []types.CoinIndicator, db *sql.DB, botToken, ch
 					log.Printf("❌ 获取K线失败: %s", sym)
 					continue
 				}
-				price := closes[len(closes)-1]
+				price1 := closes[len(closes)-1]
+				price2 := closes[len(closes)-2]
+				price3 := closes[len(closes)-3]
 				priceGT := GetPriceGT_EMA25FromDB(db, sym)
 				ema25M15, ema50M15 := Get15MEMAFromDB(db, sym)
 				ema25M5, ema50M5 := Get5MEMAFromDB(db, sym)
@@ -63,32 +65,36 @@ func WaitEnerge(resultsChan chan []types.CoinIndicator, db *sql.DB, botToken, ch
 				if isCoreCoin(sym) {
 					// 四大币判断逻辑
 					if token.Operation == "Buy" {
-						if priceGT && ema25M15 > ema50M15 && price > ema25M5 {
-							msg := fmt.Sprintf("✅ [等待成功-BUY] %s 出现右侧信号\n价格：%.4f\n时间：%s", sym, price, now.Format("15:04"))
+						condition1 := price1 > ema25M5 && price2 > ema25M5
+						condition2 := price1 > ema25M5 && price2 < ema25M5 && price3 > ema25M5
+						if priceGT && ema25M15 > ema50M15 && (condition1 || condition2) {
+							msg := fmt.Sprintf("🟢%s \n价格：%.4f\n时间：%s", sym, price1, now.Format("15:04"))
 							telegram.SendMessage(botToken, chatID, msg)
-							log.Printf("✅ Wait→Soon Buy (四大): %s", sym)
+							log.Printf("🟢 等待成功 Buy : %s", sym)
 							waitMu.Lock()
 							delete(waitList, sym)
 							waitMu.Unlock()
 							continue
 						} else if ema25M15 < ema50M15 {
-							log.Printf("❌ Wait失败 Buy (四大): %s", sym)
+							log.Printf("❌ Wait失败 Buy : %s", sym)
 							waitMu.Lock()
 							delete(waitList, sym)
 							waitMu.Unlock()
 							continue
 						}
 					} else if token.Operation == "Sell" {
-						if !priceGT && ema25M15 < ema50M15 && price < ema25M5 {
-							msg := fmt.Sprintf("❌ [等待成功-SELL] %s 出现右侧信号（做空）\n价格：%.4f\n时间：%s", sym, price, now.Format("15:04"))
+						condition1 := price1 < ema25M5 && price2 < ema25M5
+						condition2 := price1 < ema25M5 && price2 > ema25M5 && price3 < ema25M5
+						if !priceGT && ema25M15 < ema50M15 && (condition1 || condition2) {
+							msg := fmt.Sprintf("🔴%s \n价格：%.4f\n时间：%s", sym, price1, now.Format("15:04"))
 							telegram.SendMessage(botToken, chatID, msg)
-							log.Printf("❌ Wait→Soon Sell (四大): %s", sym)
+							log.Printf("🔴 等待成功 Sell : %s", sym)
 							waitMu.Lock()
 							delete(waitList, sym)
 							waitMu.Unlock()
 							continue
 						} else if ema25M15 > ema50M15 {
-							log.Printf("❌ Wait失败 Sell (四大): %s", sym)
+							log.Printf("❌ Wait失败 Sell : %s", sym)
 							waitMu.Lock()
 							delete(waitList, sym)
 							waitMu.Unlock()
@@ -97,49 +103,47 @@ func WaitEnerge(resultsChan chan []types.CoinIndicator, db *sql.DB, botToken, ch
 					}
 					// 超时（8小时）
 					if now.Sub(token.AddedAt) > 8*time.Hour {
-						log.Printf("⏰ Wait超时清理 (四大): %s", sym)
+						log.Printf("⏰ Wait超时清理 : %s", sym)
 						waitMu.Lock()
 						delete(waitList, sym)
 						waitMu.Unlock()
 					}
 				} else {
-					// 动能币判断逻辑
-					_, closes, err := GetKlinesByAPI(client, sym, "1m", klinesCount)
-					if err != nil {
-						log.Printf("❌ 获取K线失败: %s", sym)
-						continue
-					}
-					price := closes[len(closes)-1]
+
 					ema25M1List := CalculateEMA(closes, 25)
 					ema25M1 := ema25M1List[len(ema25M1List)-1]
 
 					if token.Operation == "Buy" {
-						if ema25M15 > ema50M15 && ema25M5 > ema50M5 && price > ema25M1 {
-							msg := fmt.Sprintf("✅ [等待成功-BUY] %s 出现右侧信号\n价格：%.4f\n时间：%s", sym, price, now.Format("15:04"))
+						condition1 := price1 > ema25M1 && price2 > ema25M1
+						condition2 := price1 > ema25M1 && price2 < ema25M1 && price3 > ema25M1
+						if ema25M15 > ema50M15 && ema25M5 > ema50M5 && (condition1 || condition2) {
+							msg := fmt.Sprintf("🟢%s \n价格：%.4f\n时间：%s", sym, price1, now.Format("15:04"))
 							telegram.SendMessage(botToken, chatID, msg)
-							log.Printf("✅ Wait→Soon Buy (动能): %s", sym)
+							log.Printf("🟢 等待成功 Buy : %s", sym)
 							waitMu.Lock()
 							delete(waitList, sym)
 							waitMu.Unlock()
 							continue
 						} else if ema25M5 < ema50M5 {
-							log.Printf("❌ Wait失败 Buy (动能): %s", sym)
+							log.Printf("❌ Wait失败 Buy : %s", sym)
 							waitMu.Lock()
 							delete(waitList, sym)
 							waitMu.Unlock()
 							continue
 						}
 					} else if token.Operation == "Sell" {
-						if ema25M15 < ema50M15 && ema25M5 > ema50M5 && price < ema25M1 {
-							msg := fmt.Sprintf("❌ [等待成功-SELL] %s 出现右侧信号（做空）\n价格：%.4f\n时间：%s", sym, price, now.Format("15:04"))
+						condition1 := price1 < ema25M1 && price2 < ema25M1
+						condition2 := price1 < ema25M1 && price2 > ema25M1 && price3 < ema25M1
+						if ema25M15 < ema50M15 && ema25M5 < ema50M5 && (condition1 || condition2) {
+							msg := fmt.Sprintf("🔴%s \n价格：%.4f\n时间：%s", sym, price1, now.Format("15:04"))
 							telegram.SendMessage(botToken, chatID, msg)
-							log.Printf("❌ Wait→Soon Sell (动能): %s", sym)
+							log.Printf("🔴 等待成功 Sell : %s", sym)
 							waitMu.Lock()
 							delete(waitList, sym)
 							waitMu.Unlock()
 							continue
 						} else if ema25M5 > ema50M5 {
-							log.Printf("❌ Wait失败 Sell (动能): %s", sym)
+							log.Printf("❌ Wait失败 Sell : %s", sym)
 							waitMu.Lock()
 							delete(waitList, sym)
 							waitMu.Unlock()
@@ -149,7 +153,7 @@ func WaitEnerge(resultsChan chan []types.CoinIndicator, db *sql.DB, botToken, ch
 
 					// 超时（4小时）
 					if now.Sub(token.AddedAt) > 4*time.Hour {
-						log.Printf("⏰ Wait超时清理 (动能): %s", sym)
+						log.Printf("⏰ Wait超时清理 : %s", sym)
 						waitMu.Lock()
 						delete(waitList, sym)
 						waitMu.Unlock()
