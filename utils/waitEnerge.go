@@ -26,7 +26,7 @@ func WaitEnerge(resultsChan chan []types.CoinIndicator, db *sql.DB, botToken, ch
 	defer ticker.Stop()
 
 	isCoreCoin := func(sym string) bool {
-		return sym == "BTCUSDT" || sym == "ETHUSDT" || sym == "SOLUSDT"
+		return sym == "BTCUSDT" || sym == "ETHUSDT"
 	}
 
 	for {

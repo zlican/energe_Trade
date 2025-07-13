@@ -29,7 +29,7 @@ var (
 	proxyURL             = "http://127.0.0.1:10809"
 	klinesCount          = 200
 	maxWorkers           = 20
-	limitVolume          = 100000000 // 1亿 USDT
+	limitVolume          = 300000000 // 1亿 USDT
 	botToken             = "8040107823:AAHC_qu5cguJf9BG4NDiUB_nwpgF-bPkJAg"
 	wait_energe_botToken = "7381664741:AAEmhhEhsq8nBgThtsOfVklNb6q4TjvI_Og"
 	chatID               = "6074996357"
@@ -204,7 +204,7 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB) (types
 	priceGT_EMA25 := utils.GetPriceGT_EMA25FromDB(db, symbol) //1H 价格在25EMA上方
 
 	var up, down bool
-	if symbol == "BTCUSDT" || symbol == "ETHUSDT" || symbol == "SOLUSDT" {
+	if symbol == "BTCUSDT" || symbol == "ETHUSDT" {
 		up = priceGT_EMA25 && ema25M15 > ema50M15    //1H GT +15分钟在上
 		down = !priceGT_EMA25 && ema25M15 < ema50M15 //1H !GT + 15分钟在下
 	} else {
@@ -213,7 +213,7 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB) (types
 	}
 
 	var srsi float64
-	if symbol == "BTCUSDT" || symbol == "ETHUSDT" || symbol == "SOLUSDT" {
+	if symbol == "BTCUSDT" || symbol == "ETHUSDT" {
 		srsi = utils.Get15SRSIFromDB(db, symbol)
 	} else {
 		srsi = utils.Get5SRSIFromDB(db, symbol)
@@ -227,7 +227,7 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB) (types
 	switch {
 	case up && buyCond:
 		progressLogger.Printf("BUY 触发: %s %.2f", symbol, price) // 👈
-		if symbol == "BTCUSDT" || symbol == "ETHUSDT" || symbol == "SOLUSDT" {
+		if symbol == "BTCUSDT" || symbol == "ETHUSDT" {
 			SmallEMA25, SmallEMA50 = utils.Get5MEMAFromDB(db, symbol) //三大对5分钟进行判断
 			if SmallEMA25 > SmallEMA50 && price > ema25M15 {          //(这里价格破中时黄)
 				status = "Soon"
@@ -251,7 +251,7 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB) (types
 			Operation:    "Buy"}, true
 	case down && sellCond:
 		progressLogger.Printf("SELL 触发: %s %.2f", symbol, price) // 👈
-		if symbol == "BTCUSDT" || symbol == "ETHUSDT" || symbol == "SOLUSDT" {
+		if symbol == "BTCUSDT" || symbol == "ETHUSDT" {
 			SmallEMA25, SmallEMA50 = utils.Get5MEMAFromDB(db, symbol) //三大对5分钟进行判断
 			if SmallEMA25 < SmallEMA50 && price < ema25M15 {          //(这里价格破中时黄)
 				status = "Soon"
