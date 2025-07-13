@@ -12,7 +12,7 @@ import (
 
 func PushTelegram(results []types.CoinIndicator, botToken, chatID string, volumeCache *types.VolumeCache, db *sql.DB) error {
 	now := time.Now().Format("2006-01-02 15:04")
-	header := fmt.Sprintf("5m 播报（%s）👇👇", now)
+	header := fmt.Sprintf("15m 播报（%s）👇👇", now)
 
 	if err := sendWithRetry(botToken, chatID, header); err != nil {
 		log.Printf("发送 header 消息失败: %v", err)
