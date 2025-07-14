@@ -56,9 +56,8 @@ func WaitEnerge(resultsChan chan []types.CoinIndicator, db *sql.DB, wait_sucess_
 				msgBuilder.WriteString(fmt.Sprintf("等待区播报（%s）👇👇\n", now.Format("15:04")))
 
 				if len(waitList) > 0 {
-					msgBuilder.WriteString("⏳ 当前等待区代币列表：\n")
 					for _, token := range waitList {
-						msgBuilder.WriteString(fmt.Sprintf("- %s (%s) 加入时间: %s\n", token.Symbol, token.Operation, token.AddedAt.Format("15:04")))
+						msgBuilder.WriteString(fmt.Sprintf("- %s (%s)   加入时间: %s\n", token.Symbol, token.Operation, token.AddedAt.Format("15:04")))
 					}
 					log.Printf("📤 推送等待区列表，共 %d 个代币", len(waitList))
 				} else {
