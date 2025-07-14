@@ -80,20 +80,46 @@ func main() {
 	utils.Update1hEMA25ToDB(client, db, float64(limitVolume), klinesCount, volumeCache, slipCoin)
 	utils.Update15MEMAToDB(client, db, float64(limitVolume), klinesCount, volumeCache, slipCoin)
 	utils.Update5MEMAToDB(client, db, float64(limitVolume), klinesCount, volumeCache, slipCoin)
-	if err := runScan(client); err != nil {
-		progressLogger.Printf("首次 scan 出错: %v", err)
-	}
+	// runScan 立即执行一次，并在 minute%15==0 的时间对齐后每15分钟执行一次
+	go func() {
+		progressLogger.Printf("[runScan] 首次立即执行: %s", time.Now().Format("15:04:05"))
+		if err := runScan(client); err != nil {
+			progressLogger.Printf("首次 runScan 出错: %v", err)
+		}
 
+		// 计算下一次对齐时间
+		now := time.Now()
+		minutesToNext := 15 - (now.Minute() % 15)
+		nextAligned := now.Truncate(time.Minute).Add(time.Duration(minutesToNext) * time.Minute).Truncate(time.Minute)
+
+		delay := time.Until(nextAligned)
+		progressLogger.Printf("[runScan] 下一次对齐在 %s 执行（等待 %v）", nextAligned.Format("15:04:05"), delay)
+
+		time.AfterFunc(delay, func() {
+			progressLogger.Printf("[runScan] 对齐执行: %s", time.Now().Format("15:04:05"))
+			if err := runScan(client); err != nil {
+				progressLogger.Printf("对齐 runScan 出错: %v", err)
+			}
+
+			ticker := time.NewTicker(15 * time.Minute)
+			for t := range ticker.C {
+				progressLogger.Printf("[runScan] 每15分钟触发: %s", t.Format("15:04:05"))
+				go func() {
+					if err := runScan(client); err != nil {
+						progressLogger.Printf("周期 runScan 出错: %v", err)
+					}
+				}()
+			}
+		})
+	}()
 	//开启等待区
 	go utils.WaitEnerge(waitChan, db, wait_energe_botToken, chatID, client, klinesCount, energe_waiting_botToken)
 	last1h := time.Time{}
-	last15m := time.Time{}
 	last5m := time.Time{}
 
 	for {
 		now := time.Now()
-		next := now.Truncate(time.Second).Add(1 * time.Second) // 每秒运行
-		time.Sleep(time.Until(next))
+		time.Sleep(time.Until(now.Truncate(time.Second).Add(1 * time.Second)))
 
 		minute := now.Minute()
 		second := now.Second()
@@ -102,19 +128,6 @@ func main() {
 			last1h = now
 			progressLogger.Printf("整点 %02d:00，执行 Update1hEMA25ToDB", now.Hour())
 			go utils.Update1hEMA25ToDB(client, db, float64(limitVolume), klinesCount, volumeCache, slipCoin)
-		}
-
-		if minute%15 == 0 && second == 0 && now.Sub(last15m) >= 15*time.Minute {
-			last15m = now
-			progressLogger.Printf("每15分钟触发，执行 Update15MEMAToDB")
-			go utils.Update15MEMAToDB(client, db, float64(limitVolume), klinesCount, volumeCache, slipCoin)
-
-			//监控
-			go func() {
-				if err := runScan(client); err != nil {
-					progressLogger.Printf("周期 scan 出错: %v", err)
-				}
-			}()
 		}
 
 		if minute%5 == 0 && second == 0 && now.Sub(last5m) >= 5*time.Minute {
