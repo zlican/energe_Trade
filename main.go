@@ -24,15 +24,16 @@ import (
 /* ====================== 结构体 & 全局 ====================== */
 
 var (
-	apiKey               = ""
-	secretKey            = ""
-	proxyURL             = "http://127.0.0.1:10809"
-	klinesCount          = 200
-	maxWorkers           = 20
-	limitVolume          = 100000000 // 1亿 USDT
-	botToken             = "8040107823:AAHC_qu5cguJf9BG4NDiUB_nwpgF-bPkJAg"
-	wait_energe_botToken = "7381664741:AAEmhhEhsq8nBgThtsOfVklNb6q4TjvI_Og"
-	chatID               = "6074996357"
+	apiKey                  = ""
+	secretKey               = ""
+	proxyURL                = "http://127.0.0.1:10809"
+	klinesCount             = 200
+	maxWorkers              = 20
+	limitVolume             = 100000000                                        // 1亿 USDT
+	botToken                = "8040107823:AAHC_qu5cguJf9BG4NDiUB_nwpgF-bPkJAg" //二级印钞
+	wait_energe_botToken    = "7381664741:AAEmhhEhsq8nBgThtsOfVklNb6q4TjvI_Og" //播报成功
+	energe_waiting_botToken = "7381664741:AAEmhhEhsq8nBgThtsOfVklNb6q4TjvI_Og" //等待区bot
+	chatID                  = "6074996357"
 
 	// volumeMap      = map[string]float64{}
 	volumeCache *types.VolumeCache
@@ -82,40 +83,42 @@ func main() {
 	}
 
 	//开启等待区
-	go utils.WaitEnerge(waitChan, db, wait_energe_botToken, chatID, client, klinesCount)
+	go utils.WaitEnerge(waitChan, db, wait_energe_botToken, chatID, client, klinesCount, energe_waiting_botToken)
+	last1h := time.Time{}
+	last15m := time.Time{}
+	last5m := time.Time{}
 
 	for {
 		now := time.Now()
-		next := now.Truncate(time.Minute).Add(time.Minute) // 下一分钟的开始时间
-		time.Sleep(time.Until(next))                       // 每分钟检查一次
+		next := now.Truncate(time.Second).Add(1 * time.Second) // 每秒运行
+		time.Sleep(time.Until(next))
 
-		now = time.Now()
 		minute := now.Minute()
-		hour := now.Hour()
+		second := now.Second()
 
-		if minute == 0 {
-			time.Sleep(10 * time.Second)
-			progressLogger.Printf("整点 %02d:00，执行 Update1hEMA25ToDB", hour)
+		if minute == 0 && now.Sub(last1h) >= time.Hour {
+			last1h = now
+			progressLogger.Printf("整点 %02d:00，执行 Update1hEMA25ToDB", now.Hour())
 			go utils.Update1hEMA25ToDB(client, db, float64(limitVolume), klinesCount, volumeCache, slipCoin)
 		}
 
-		if minute%15 == 0 {
-			time.Sleep(10 * time.Second)
-			progressLogger.Printf("每15分钟触发，执行 Update15MEMAToDB", hour)
+		if minute%15 == 0 && second == 0 && now.Sub(last15m) >= 15*time.Minute {
+			last15m = now
+			progressLogger.Printf("每15分钟触发，执行 Update15MEMAToDB")
 			go utils.Update15MEMAToDB(client, db, float64(limitVolume), klinesCount, volumeCache, slipCoin)
 
-			//这里进行监控扫描，二级市场
-			if err := runScan(client); err != nil {
-				progressLogger.Printf("周期 scan 出错: %v", err)
-			}
-			time.Sleep(1 * time.Minute)
+			//监控
+			go func() {
+				if err := runScan(client); err != nil {
+					progressLogger.Printf("周期 scan 出错: %v", err)
+				}
+			}()
 		}
 
-		if minute%5 == 0 {
-			time.Sleep(10 * time.Second)
-			progressLogger.Printf("每5分钟触发，执行 runScan (%02d:%02d)", hour, minute)
+		if minute%5 == 0 && second == 0 && now.Sub(last5m) >= 5*time.Minute {
+			last5m = now
+			progressLogger.Printf("每5分钟触发，执行 Update5MEMAToDB")
 			go utils.Update5MEMAToDB(client, db, float64(limitVolume), klinesCount, volumeCache, slipCoin)
-
 		}
 	}
 }
@@ -195,15 +198,12 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB) (types
 
 	var status string
 	var SmallEMA25, SmallEMA50 float64
-	var EMA25M1, EMA50M1 float64
 	switch {
 	case up && buyCond:
 		progressLogger.Printf("BUY 触发: %s %.2f", symbol, price) // 👈
-
-		EMA25M1, EMA50M1 = utils.Get1MEMA(client, klinesCount, symbol)
 		/* if symbol == "BTCUSDT" || symbol == "ETHUSDT" { */
-		SmallEMA25, SmallEMA50 = utils.Get5MEMAFromDB(db, symbol)             //三大对5分钟进行判断
-		if SmallEMA25 > SmallEMA50 && EMA25M1 > EMA50M1 && price > ema25M15 { //(这里价格破中时黄)
+		SmallEMA25, SmallEMA50 = utils.Get5MEMAFromDB(db, symbol) //三大对5分钟进行判断
+		if SmallEMA25 > SmallEMA50 && price > ema25M15 {
 			status = "Soon"
 		} else {
 			status = "Wait"
@@ -216,11 +216,9 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB) (types
 			Status:       status,
 			Operation:    "Buy"}, true
 	case down && sellCond:
-		progressLogger.Printf("SELL 触发: %s %.2f", symbol, price) // 👈
-		EMA25M1, EMA50M1 = utils.Get1MEMA(client, klinesCount, symbol)
-		/* if symbol == "BTCUSDT" || symbol == "ETHUSDT" { */
-		SmallEMA25, SmallEMA50 = utils.Get5MEMAFromDB(db, symbol)             //对5分钟进行判断
-		if SmallEMA25 < SmallEMA50 && EMA25M1 < EMA50M1 && price < ema25M15 { //(这里价格破中时黄)
+		progressLogger.Printf("SELL 触发: %s %.2f", symbol, price)  // 👈
+		SmallEMA25, SmallEMA50 = utils.Get5MEMAFromDB(db, symbol) //对5分钟进行判断
+		if SmallEMA25 < SmallEMA50 && price < ema25M15 {
 			status = "Soon"
 		} else {
 			status = "Wait"

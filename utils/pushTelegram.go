@@ -5,6 +5,7 @@ import (
 	"energe/telegram"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"energe/types"
@@ -12,11 +13,9 @@ import (
 
 func PushTelegram(results []types.CoinIndicator, botToken, chatID string, volumeCache *types.VolumeCache, db *sql.DB) error {
 	now := time.Now().Format("2006-01-02 15:04")
-	header := fmt.Sprintf("15m 播报（%s）👇👇", now)
+	var msgBuilder strings.Builder
 
-	if err := sendWithRetry(botToken, chatID, header); err != nil {
-		log.Printf("发送 header 消息失败: %v", err)
-	}
+	msgBuilder.WriteString(fmt.Sprintf("15m 播报（%s）👇👇\n", now))
 
 	for _, r := range results {
 		operation := r.Operation
@@ -24,31 +23,38 @@ func PushTelegram(results []types.CoinIndicator, botToken, chatID string, volume
 			continue
 		}
 		volume, ok := volumeCache.Get(r.Symbol)
-		if !ok || volume < 300000000 {
+		if !ok || volume < 300_000_000 {
 			continue
 		}
-		var msg string
 
+		var line string
 		if operation == "Buy" {
 			if r.Symbol == "BTCUSDT" || r.Symbol == "ETHUSDT" {
-				msg = fmt.Sprintf("💎%-4s %-10s (%4s)", r.Operation, r.Symbol, r.Status)
+				line = fmt.Sprintf("💎%-4s %-10s (%4s)", r.Operation, r.Symbol, r.Status)
 			} else {
-				msg = fmt.Sprintf("🟢%-4s %-10s (%4s)", r.Operation, r.Symbol, r.Status)
+				line = fmt.Sprintf("🟢%-4s %-10s (%4s)", r.Operation, r.Symbol, r.Status)
 			}
 		} else if operation == "Sell" {
 			if r.Symbol == "BTCUSDT" || r.Symbol == "ETHUSDT" {
-				msg = fmt.Sprintf("💎%-4s %-10s (%4s)", r.Operation, r.Symbol, r.Status)
+				line = fmt.Sprintf("💎%-4s %-10s (%4s)", r.Operation, r.Symbol, r.Status)
 			} else {
-				msg = fmt.Sprintf("🔴%-4s %-10s (%4s)", r.Operation, r.Symbol, r.Status)
+				line = fmt.Sprintf("🔴%-4s %-10s (%4s)", r.Operation, r.Symbol, r.Status)
 			}
 		} else {
-			continue // 不满足推送条件
+			continue // 忽略非 Buy/Sell 操作
 		}
 
-		if err := sendWithRetry(botToken, chatID, msg); err != nil {
-			log.Printf("发送 %s 消息失败: %v", r.Symbol, err)
-			continue
-		}
+		msgBuilder.WriteString(line + "\n")
+	}
+
+	msg := msgBuilder.String()
+	if strings.TrimSpace(msg) == "" {
+		log.Println("📭 无需推送 Telegram 消息")
+		return nil
+	}
+
+	if err := sendWithRetry(botToken, chatID, msg); err != nil {
+		log.Printf("发送合并消息失败: %v", err)
 	}
 	return nil
 }
@@ -57,7 +63,7 @@ func PushTelegram(results []types.CoinIndicator, botToken, chatID string, volume
 func sendWithRetry(botToken, chatID, msg string) error {
 	err := telegram.SendMessage(botToken, chatID, msg)
 	if err != nil {
-		time.Sleep(2 * time.Second) // 可根据需求调节重试等待时间
+		time.Sleep(2 * time.Second)
 		err = telegram.SendMessage(botToken, chatID, msg)
 	}
 	return err
