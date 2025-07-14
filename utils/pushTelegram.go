@@ -23,19 +23,19 @@ func PushTelegram(results []types.CoinIndicator, botToken, chatID string, volume
 			continue
 		}
 		volume, ok := volumeCache.Get(r.Symbol)
-		if !ok || volume < 300_000_000 {
+		if !ok || volume < 100000000 {
 			continue
 		}
 
 		var line string
 		if operation == "Buy" {
-			if r.Symbol == "BTCUSDT" || r.Symbol == "ETHUSDT" {
+			if r.Symbol == "BTCUSDT" || r.Symbol == "ETHUSDT" || r.Symbol == "SOLUSDT" {
 				line = fmt.Sprintf("💎%-4s %-10s (%4s)", r.Operation, r.Symbol, r.Status)
 			} else {
 				line = fmt.Sprintf("🟢%-4s %-10s (%4s)", r.Operation, r.Symbol, r.Status)
 			}
 		} else if operation == "Sell" {
-			if r.Symbol == "BTCUSDT" || r.Symbol == "ETHUSDT" {
+			if r.Symbol == "BTCUSDT" || r.Symbol == "ETHUSDT" || r.Symbol == "SOLUSDT" {
 				line = fmt.Sprintf("💎%-4s %-10s (%4s)", r.Operation, r.Symbol, r.Status)
 			} else {
 				line = fmt.Sprintf("🔴%-4s %-10s (%4s)", r.Operation, r.Symbol, r.Status)

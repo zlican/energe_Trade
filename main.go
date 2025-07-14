@@ -29,22 +29,24 @@ var (
 	proxyURL                = "http://127.0.0.1:10809"
 	klinesCount             = 200
 	maxWorkers              = 20
-	limitVolume             = 100000000                                         // 1亿 USDT
-	botToken                = "8040107823:AAHC_qu5cguJf9BG4NDiUB_nwpgF-bPkJAg"  //二级印钞
-	wait_energe_botToken    = "7381664741:AAEmhhEhsq8nBgThtsOfVklNb6q4TjvI_Og"  //播报成功
-	energe_waiting_botToken = "​7417712542:AAGjCOMeFFFuNCo5vNBWDYJqGs0Qm2ifwmY" //等待区bot
+	limitVolume             = 100000000                                        // 1亿 USDT
+	botToken                = "8040107823:AAHC_qu5cguJf9BG4NDiUB_nwpgF-bPkJAg" //二级印钞
+	wait_energe_botToken    = "7381664741:AAEmhhEhsq8nBgThtsOfVklNb6q4TjvI_Og" //播报成功
+	energe_waiting_botToken = "7417712542:AAGjCOMeFFFuNCo5vNBWDYJqGs0Qm2ifwmY" //等待区bot
 	chatID                  = "6074996357"
 
 	// volumeMap      = map[string]float64{}
 	volumeCache *types.VolumeCache
 	err         error
-	slipCoin    = []string{"XRPUSDT", "DOGEUSDT", "1000PEPEUSDT", "ADAUSDT", "BNBUSDT", "UNIUSDT", "TRUMPUSDT",
-		"LINKUSDT", "FARTCOINUSDT", "1000BONKUSDT", "AAVEUSDT", "AVAXUSDT", "SUIUSDT", "LTCUSDT",
-		"SEIUSDT", "BCHUSDT", "WIFUSDT", "XLMUSDT", "XRPUSDC", "BNXUSDT", "ETHUSDC", "BTCUSDC", "SOLUSDC",
-		"DOTUSDT", "NEARUSDT", "ARBUSDT", "1000SHIBUSDT", "TIAUSDT", "TRXUSDT", "HYPEUSDT", "PNUTUSDT",
-		"HBARUSDT", "VIRTUALUSDT", "PUMPUSDT", "1INCHUSDT", "SUIUSDC", "1000FLOKIUSDT", "GALAUSDT",
-		"WLDUSDT", "FILUSDT", "APTUSDT", "TAOUSDT", "CRVUSDT", "FETUSDT", "INJUSDT", "1000BONKUSDC",
-		"SPXUSDT", "TONUSDT", "ETCUSDT"} // 想排除的币放这里
+	slipCoin    = []string{"XRPUSDT", "1000PEPEUSDT", "ADAUSDT", "BNBUSDT", "AGIXUSDT",
+		"LINKUSDT", "FARTCOINUSDT", "1000BONKUSDT", "AVAXUSDT", "LTCUSDT", "ALPACAUSDT",
+		"BCHUSDT", "XLMUSDT", "XRPUSDC", "BNXUSDT", "ETHUSDC", "BTCUSDC", "SOLUSDC", "VIDTUSDT",
+		"DOTUSDT", "NEARUSDT", "ARBUSDT", "1000SHIBUSDT", "TRXUSDT", "PNUTUSDT", "HYPEUSDT",
+		"HBARUSDT", "1INCHUSDT", "SUIUSDC", "1000FLOKIUSDT", "GALAUSDT", "TIAUSDT", "ETHFIUSDT",
+		"WLDUSDT", "FILUSDT", "TAOUSDT", "CRVUSDT", "FETUSDT", "INJUSDT", "1000BONKUSDC",
+		"SPXUSDT", "TONUSDT", "ETCUSDT", "DOGEUSDT", "SUIUSDT", "PUMPUSDT", "AAVEUSDT", "ENAUSDT",
+		"UNIUSDT", "APTUSDT", "TRUMPUSDT", "DOGEUSDC", "VIRTUALUSDT", "SEIUSDT", "WIFUSDT", "OPUSDT",
+		"ONDOUSDT", "MOODENGUSDT"} // 想排除的币放这里
 	muVolumeMap    sync.Mutex
 	progressLogger = log.New(os.Stdout, "[Screener] ", log.LstdFlags)
 	db             *sql.DB
@@ -132,6 +134,16 @@ func runScan(client *futures.Client) error {
 	var symbols []string
 	symbols = volumeCache.SymbolsAbove(float64(limitVolume))
 	progressLogger.Printf("USDT 交易对数量: %d", len(symbols))
+
+	// ---------- 2. 获取趋势 ----------
+	bestrend := types.BESTrend{
+		MapTrend: map[string]string{
+			"BTCUSDT": utils.GetBTCTrend(db),
+			"ETHUSDT": utils.GetETHTrend(db),
+			"SOLUSDT": utils.GetSOLTrend(db),
+		},
+	}
+
 	// ---------- 3. 并发处理 ----------
 	var (
 		results []types.CoinIndicator
@@ -151,7 +163,7 @@ func runScan(client *futures.Client) error {
 			defer wg.Done()
 			defer sem.Release(1)
 
-			ind, ok := analyseSymbol(client, sym, "15m", db)
+			ind, ok := analyseSymbol(client, sym, "15m", db, bestrend)
 			if ok {
 				resMu.Lock()
 				results = append(results, ind)
@@ -175,7 +187,7 @@ func runScan(client *futures.Client) error {
 
 /* ====================== 单币分析 ====================== */
 
-func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB) (types.CoinIndicator, bool) {
+func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestrend types.BESTrend) (types.CoinIndicator, bool) {
 
 	_, closes, err := utils.GetKlinesByAPI(client, symbol, tf, klinesCount)
 	if err != nil {
@@ -196,10 +208,26 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB) (types
 	buyCond := srsi < 25 || srsi < 20
 	sellCond := srsi > 75 || srsi > 80
 
+	// ---------- 判定BES趋势进行动能币过滤 ----------
+	var MainTrend string
+	if bestrend.MapTrend["BTCUSDT"] == "up" || bestrend.MapTrend["ETHUSDT"] == "up" || bestrend.MapTrend["SOLUSDT"] == "up" {
+		MainTrend = "up"
+	} else if bestrend.MapTrend["BTCUSDT"] == "down" || bestrend.MapTrend["ETHUSDT"] == "down" || bestrend.MapTrend["SOLUSDT"] == "down" {
+		MainTrend = "down"
+	} else {
+		MainTrend = "none"
+	}
+
 	var status string
 	var SmallEMA25, SmallEMA50 float64
 	switch {
 	case up && buyCond:
+		if MainTrend == "up" {
+			if symbol != "BTCUSDT" && symbol != "ETHUSDT" && symbol != "SOLUSDT" {
+				return types.CoinIndicator{}, false
+			}
+		}
+
 		progressLogger.Printf("BUY 触发: %s %.2f", symbol, price) // 👈
 		/* if symbol == "BTCUSDT" || symbol == "ETHUSDT" { */
 		SmallEMA25, SmallEMA50 = utils.Get5MEMAFromDB(db, symbol) //三大对5分钟进行判断
@@ -216,6 +244,12 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB) (types
 			Status:       status,
 			Operation:    "Buy"}, true
 	case down && sellCond:
+		if MainTrend == "down" {
+			if symbol != "BTCUSDT" && symbol != "ETHUSDT" && symbol != "SOLUSDT" {
+				return types.CoinIndicator{}, false
+			}
+		}
+
 		progressLogger.Printf("SELL 触发: %s %.2f", symbol, price)  // 👈
 		SmallEMA25, SmallEMA50 = utils.Get5MEMAFromDB(db, symbol) //对5分钟进行判断
 		if SmallEMA25 < SmallEMA50 && price < ema25M15 {
