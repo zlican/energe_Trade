@@ -149,11 +149,9 @@ func runScan(client *futures.Client) error {
 	progressLogger.Printf("USDT 交易对数量: %d", len(symbols))
 
 	// ---------- 2. 获取趋势 ----------
-	bestrend := types.BESTrend{
+	btctrend := types.BTCTrend{
 		MapTrend: map[string]string{
 			"BTCUSDT": utils.GetBTCTrend(db),
-			"ETHUSDT": utils.GetETHTrend(db),
-			"SOLUSDT": utils.GetSOLTrend(db),
 		},
 	}
 
@@ -176,7 +174,7 @@ func runScan(client *futures.Client) error {
 			defer wg.Done()
 			defer sem.Release(1)
 
-			ind, ok := analyseSymbol(client, sym, "15m", db, bestrend)
+			ind, ok := analyseSymbol(client, sym, "15m", db, btctrend)
 			if ok {
 				resMu.Lock()
 				results = append(results, ind)
@@ -200,10 +198,11 @@ func runScan(client *futures.Client) error {
 
 /* ====================== 单币分析 ====================== */
 
-func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestrend types.BESTrend) (types.CoinIndicator, bool) {
+func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, btctrend types.BTCTrend) (types.CoinIndicator, bool) {
 
 	_, closes, err := utils.GetKlinesByAPI(client, symbol, tf, klinesCount)
-	if err != nil {
+	if err != nil || len(closes) < 51 {
+		progressLogger.Printf("❌ K线不足: %s %s err: %v", symbol, tf, err)
 		return types.CoinIndicator{}, false
 	}
 
@@ -221,11 +220,11 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 	buyCond := srsi < 25 || srsi < 20
 	sellCond := srsi > 75 || srsi > 80
 
-	// ---------- 判定BES趋势进行动能币过滤 ----------
+	// ---------- 判定BTC趋势进行动能币过滤 ----------
 	var MainTrend string
-	if bestrend.MapTrend["BTCUSDT"] == "up" || bestrend.MapTrend["ETHUSDT"] == "up" || bestrend.MapTrend["SOLUSDT"] == "up" {
+	if btctrend.MapTrend["BTCUSDT"] == "up" {
 		MainTrend = "up"
-	} else if bestrend.MapTrend["BTCUSDT"] == "down" || bestrend.MapTrend["ETHUSDT"] == "down" || bestrend.MapTrend["SOLUSDT"] == "down" {
+	} else if btctrend.MapTrend["BTCUSDT"] == "down" {
 		MainTrend = "down"
 	} else {
 		MainTrend = "none"
@@ -235,15 +234,14 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 	var SmallEMA25, SmallEMA50 float64
 	switch {
 	case up && buyCond:
-		if MainTrend == "up" {
-			if symbol != "BTCUSDT" && symbol != "ETHUSDT" && symbol != "SOLUSDT" {
+		if MainTrend == "up" || MainTrend == "down" {
+			if symbol != "BTCUSDT" {
 				return types.CoinIndicator{}, false
 			}
 		}
 
-		progressLogger.Printf("BUY 触发: %s %.2f", symbol, price) // 👈
-		/* if symbol == "BTCUSDT" || symbol == "ETHUSDT" { */
-		SmallEMA25, SmallEMA50 = utils.Get5MEMAFromDB(db, symbol) //三大对5分钟进行判断
+		progressLogger.Printf("BUY 触发: %s %.2f", symbol, price)   // 👈
+		SmallEMA25, SmallEMA50 = utils.Get5MEMAFromDB(db, symbol) //对5分钟进行判断
 		if SmallEMA25 > SmallEMA50 && price > ema25M15 {
 			status = "Soon"
 		} else {
@@ -258,7 +256,7 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 			Operation:    "Buy"}, true
 	case down && sellCond:
 		if MainTrend == "down" {
-			if symbol != "BTCUSDT" && symbol != "ETHUSDT" && symbol != "SOLUSDT" {
+			if symbol != "BTCUSDT" {
 				return types.CoinIndicator{}, false
 			}
 		}

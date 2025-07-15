@@ -28,7 +28,7 @@ func GetKlinesByAPI(client *futures.Client, symbol, tf string, klinesCount int) 
 			Limit(klinesCount).Do(ctx)
 
 		// 拉取成功且数量够用，直接跳出循环
-		if err == nil && len(klines) >= 35 {
+		if err == nil && len(klines) >= 51 {
 			break
 		}
 
@@ -42,7 +42,7 @@ func GetKlinesByAPI(client *futures.Client, symbol, tf string, klinesCount int) 
 	}
 
 	// 若三次仍失败或数量不足，返回失败标记
-	if err != nil || len(klines) < 35 {
+	if err != nil || len(klines) < 51 {
 		return nil, nil, err
 	}
 

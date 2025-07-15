@@ -1,5 +1,5 @@
 package types
 
-type BESTrend struct {
+type BTCTrend struct {
 	MapTrend map[string]string
 }

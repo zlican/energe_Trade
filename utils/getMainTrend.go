@@ -20,6 +20,7 @@ func GetBTCTrend(db *sql.DB) string {
 	return "none"
 }
 
+/*
 func GetETHTrend(db *sql.DB) string {
 	priceGT_EMA25 := GetPriceGT_EMA25FromDB(db, "ETHUSDT")
 	ema25M15, ema50M15 := Get15MEMAFromDB(db, "ETHUSDT")
@@ -51,3 +52,4 @@ func GetSOLTrend(db *sql.DB) string {
 	}
 	return "none"
 }
+*/
