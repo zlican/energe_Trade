@@ -11,11 +11,20 @@ import (
 	"energe/types"
 )
 
-func PushTelegram(results []types.CoinIndicator, botToken, chatID string, volumeCache *types.VolumeCache, db *sql.DB) error {
+func PushTelegram(results []types.CoinIndicator, botToken, chatID string, volumeCache *types.VolumeCache, db *sql.DB, btctrend types.BTCTrend) error {
 	now := time.Now().Format("2006-01-02 15:04")
 	var msgBuilder strings.Builder
 
-	msgBuilder.WriteString(fmt.Sprintf("15m 播报（%s）👇👇\n", now))
+	var trend string
+	if btctrend.MapTrend["BTCUSDT"] == "up" {
+		trend = "上升趋势"
+	} else if btctrend.MapTrend["BTCUSDT"] == "down" {
+		trend = "下跌趋势"
+	} else {
+		trend = "随机漫步"
+	}
+
+	msgBuilder.WriteString(fmt.Sprintf("BTC:%s（%s）👇👇\n", trend, now))
 
 	for _, r := range results {
 		operation := r.Operation

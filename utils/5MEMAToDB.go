@@ -29,7 +29,7 @@ func Update5MEMAToDB(client *futures.Client, db *sql.DB, limitVolume float64, kl
 		for attempt := 1; attempt <= 3; attempt++ {
 			klines, err = client.NewKlinesService().
 				Symbol(symbol).Interval("5m").Limit(klinesCount).Do(ctx)
-			if err == nil && len(klines) >= 51 {
+			if err == nil && len(klines) >= 2 {
 				break
 			}
 			log.Printf("第 %d 次拉取 %s 5m K 线失败: %v", attempt, symbol, err)
@@ -37,7 +37,7 @@ func Update5MEMAToDB(client *futures.Client, db *sql.DB, limitVolume float64, kl
 				time.Sleep(time.Second)
 			}
 		}
-		if err != nil || len(klines) < 51 {
+		if err != nil || len(klines) < 2 {
 			continue
 		}
 		var closes []float64
@@ -76,7 +76,7 @@ func Update5MEMAToDB(client *futures.Client, db *sql.DB, limitVolume float64, kl
 func Get5MEMAFromDB(db *sql.DB, symbol string) (ema25, ema50 float64) {
 	err := db.QueryRow("SELECT ema25, ema50 FROM symbol_ema_5min WHERE symbol = ?", symbol).Scan(&ema25, &ema50)
 	if err != nil {
-		log.Printf("查询 EMA25 失败 %s: %v", symbol, err)
+		log.Printf("查询 5MEMA 失败 %s: %v", symbol, err)
 		return 0, 0
 	}
 	return ema25, ema50

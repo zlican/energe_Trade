@@ -19,7 +19,7 @@ func Get1MEMA(client *futures.Client, klinesCount int, symbol string) (float64, 
 	for attempt := 1; attempt <= 3; attempt++ {
 		klines, err = client.NewKlinesService().
 			Symbol(symbol).Interval("1m").Limit(klinesCount).Do(ctx)
-		if err == nil && len(klines) >= 51 {
+		if err == nil && len(klines) >= 2 {
 			break
 		}
 		log.Printf("第 %d 次拉取 %s 5m K 线失败: %v", attempt, symbol, err)
@@ -27,7 +27,7 @@ func Get1MEMA(client *futures.Client, klinesCount int, symbol string) (float64, 
 			time.Sleep(time.Second)
 		}
 	}
-	if err != nil || len(klines) < 51 {
+	if err != nil || len(klines) < 2 {
 		return 0, 0
 	}
 	var closes []float64

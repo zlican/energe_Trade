@@ -51,6 +51,7 @@ var (
 	progressLogger = log.New(os.Stdout, "[Screener] ", log.LstdFlags)
 	db             *sql.DB
 	waitChan       = make(chan []types.CoinIndicator, 30) //等待区
+	btctrend       types.BTCTrend
 )
 
 /* ====================== 主函数 ====================== */
@@ -149,7 +150,7 @@ func runScan(client *futures.Client) error {
 	progressLogger.Printf("USDT 交易对数量: %d", len(symbols))
 
 	// ---------- 2. 获取趋势 ----------
-	btctrend := types.BTCTrend{
+	btctrend = types.BTCTrend{
 		MapTrend: map[string]string{
 			"BTCUSDT": utils.GetBTCTrend(db),
 		},
@@ -193,7 +194,7 @@ func runScan(client *futures.Client) error {
 	})
 
 	// ---------- 4. 推送到 Telegram ----------
-	return utils.PushTelegram(results, botToken, chatID, volumeCache, db)
+	return utils.PushTelegram(results, botToken, chatID, volumeCache, db, btctrend)
 }
 
 /* ====================== 单币分析 ====================== */
@@ -201,18 +202,23 @@ func runScan(client *futures.Client) error {
 func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, btctrend types.BTCTrend) (types.CoinIndicator, bool) {
 
 	_, closes, err := utils.GetKlinesByAPI(client, symbol, tf, klinesCount)
-	if err != nil || len(closes) < 51 {
-		progressLogger.Printf("❌ K线不足: %s %s err: %v", symbol, tf, err)
+	if err != nil || len(closes) < 2 {
 		return types.CoinIndicator{}, false
 	}
 
 	price := closes[len(closes)-1]
 	ema25M15, ema50M15 := utils.Get15MEMAFromDB(db, symbol)
+	ema25M1H, ema50M1H := utils.Get1HEMAFromDB(db, symbol)
 	priceGT_EMA25 := utils.GetPriceGT_EMA25FromDB(db, symbol) //1H 价格在25EMA上方
 
 	var up, down bool
-	up = priceGT_EMA25 && ema25M15 > ema50M15    //1H GT +15分钟在上
-	down = !priceGT_EMA25 && ema25M15 < ema50M15 //1H !GT + 15分钟在下
+	if symbol == "BTCUSDT" {
+		up = priceGT_EMA25 && ema25M15 > ema50M15    //1H GT +15分钟在上
+		down = !priceGT_EMA25 && ema25M15 < ema50M15 //1H !GT + 15分钟在下
+	} else {
+		up = ema25M1H > ema50M1H && ema25M15 > ema50M15
+		down = ema25M1H < ema50M1H && ema25M15 < ema50M15
+	}
 
 	var srsi float64
 	srsi = utils.Get15SRSIFromDB(db, symbol)
@@ -234,7 +240,7 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, btctre
 	var SmallEMA25, SmallEMA50 float64
 	switch {
 	case up && buyCond:
-		if MainTrend == "up" || MainTrend == "down" {
+		if MainTrend == "up" {
 			if symbol != "BTCUSDT" {
 				return types.CoinIndicator{}, false
 			}

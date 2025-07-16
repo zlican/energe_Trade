@@ -42,7 +42,7 @@ func GetKlinesByAPI(client *futures.Client, symbol, tf string, klinesCount int) 
 	}
 
 	// 若三次仍失败或数量不足，返回失败标记
-	if err != nil || len(klines) < 51 {
+	if err != nil || len(klines) < 2 {
 		return nil, nil, err
 	}
 
