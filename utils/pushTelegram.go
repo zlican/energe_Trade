@@ -24,7 +24,7 @@ func PushTelegram(results []types.CoinIndicator, botToken, chatID string, volume
 		trend = "随机漫步"
 	}
 
-	msgBuilder.WriteString(fmt.Sprintf("BTC:%s（%s）👇👇\n", trend, now))
+	msgBuilder.WriteString(fmt.Sprintf("BTC:%s（%s）👇\n", trend, now))
 
 	for _, r := range results {
 		operation := r.Operation
@@ -38,13 +38,13 @@ func PushTelegram(results []types.CoinIndicator, botToken, chatID string, volume
 
 		var line string
 		if operation == "Buy" {
-			if r.Symbol == "BTCUSDT" {
+			if r.Symbol == "BTCUSDT" || r.Symbol == "ETHUSDT" {
 				line = fmt.Sprintf("💎%-4s %-10s (%4s)", r.Operation, r.Symbol, r.Status)
 			} else {
 				line = fmt.Sprintf("🟢%-4s %-10s (%4s)", r.Operation, r.Symbol, r.Status)
 			}
 		} else if operation == "Sell" {
-			if r.Symbol == "BTCUSDT" {
+			if r.Symbol == "BTCUSDT" || r.Symbol == "ETHUSDT" {
 				line = fmt.Sprintf("💎%-4s %-10s (%4s)", r.Operation, r.Symbol, r.Status)
 			} else {
 				line = fmt.Sprintf("🔴%-4s %-10s (%4s)", r.Operation, r.Symbol, r.Status)

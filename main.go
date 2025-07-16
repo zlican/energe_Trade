@@ -241,7 +241,7 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, btctre
 	switch {
 	case up && buyCond:
 		if MainTrend == "up" {
-			if symbol != "BTCUSDT" {
+			if symbol != "BTCUSDT" && symbol != "ETHUSDT" {
 				return types.CoinIndicator{}, false
 			}
 		}
@@ -262,7 +262,7 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, btctre
 			Operation:    "Buy"}, true
 	case down && sellCond:
 		if MainTrend == "down" {
-			if symbol != "BTCUSDT" {
+			if symbol != "BTCUSDT" && symbol != "ETHUSDT" {
 				return types.CoinIndicator{}, false
 			}
 		}
