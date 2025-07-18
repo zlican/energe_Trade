@@ -33,10 +33,19 @@ func sendWaitListBroadcast(now time.Time, waiting_token, chatID string) {
 	}
 
 	var msgBuilder strings.Builder
-	msgBuilder.WriteString(fmt.Sprintf("等待区更新（%s）👇👇\n", now.Format("15:04")))
+	msgBuilder.WriteString(fmt.Sprintf("等待区更新（%s）👇\n", now.Format("15:04")))
+
+	var emoje string
 
 	for _, token := range waitList {
-		msgBuilder.WriteString(fmt.Sprintf("- %s (%s)   加入时间: %s\n", token.Symbol, token.Operation, token.AddedAt.Format("15:04")))
+		if token.Operation == "Buy" {
+			emoje = "🟢"
+		} else if token.Operation == "Sell" {
+			emoje = "🔴"
+		} else {
+			emoje = "-"
+		}
+		msgBuilder.WriteString(fmt.Sprintf("%s %-12s	加入: %s\n", emoje, token.Symbol, token.AddedAt.Format("15:04")))
 	}
 	msg := msgBuilder.String()
 	log.Printf("📤 推送等待区更新列表，共 %d 个代币", len(waitList))

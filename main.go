@@ -46,7 +46,7 @@ var (
 		"WLDUSDT", "FILUSDT", "TAOUSDT", "CRVUSDT", "FETUSDT", "INJUSDT", "1000BONKUSDC",
 		"SPXUSDT", "TONUSDT", "ETCUSDT", "DOGEUSDT", "SUIUSDT", "PUMPUSDT", "AAVEUSDT", "ENAUSDT",
 		"UNIUSDT", "APTUSDT", "TRUMPUSDT", "DOGEUSDC", "VIRTUALUSDT", "SEIUSDT", "WIFUSDT", "OPUSDT",
-		"ONDOUSDT", "MOODENGUSDT"} // 想排除的币放这里
+		"ONDOUSDT", "MOODENGUSDT", "PENGUUSDT"} // 想排除的币放这里
 	muVolumeMap    sync.Mutex
 	progressLogger = log.New(os.Stdout, "[Screener] ", log.LstdFlags)
 	db             *sql.DB
@@ -146,6 +146,10 @@ func runScan(client *futures.Client) error {
 
 	// ---------- 1. 过滤 USDT 交易对 ----------
 	var symbols []string
+	if volumeCache == nil {
+		progressLogger.Println("volumeCache 尚未准备好")
+		return nil
+	}
 	symbols = volumeCache.SymbolsAbove(float64(limitVolume))
 	progressLogger.Printf("USDT 交易对数量: %d", len(symbols))
 
@@ -185,7 +189,11 @@ func runScan(client *futures.Client) error {
 	}
 	wg.Wait()
 
-	waitChan <- results //将一次runScan的数据推送给等待区
+	select {
+	case waitChan <- results:
+	default:
+		progressLogger.Println("waitChan 被阻塞，跳过本次发送")
+	}
 
 	progressLogger.Printf("本轮符合条件标的数量: %d", len(results))
 

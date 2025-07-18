@@ -17,9 +17,9 @@ func PushTelegram(results []types.CoinIndicator, botToken, chatID string, volume
 
 	var trend string
 	if btctrend.MapTrend["BTCUSDT"] == "up" {
-		trend = "上升趋势"
+		trend = "🟢上升趋势"
 	} else if btctrend.MapTrend["BTCUSDT"] == "down" {
-		trend = "下跌趋势"
+		trend = "🔴下跌趋势"
 	} else {
 		trend = "随机漫步"
 	}
