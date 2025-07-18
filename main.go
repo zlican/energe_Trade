@@ -98,6 +98,7 @@ func main() {
 
 		time.AfterFunc(delay, func() {
 			progressLogger.Printf("[runScan] 对齐执行: %s", time.Now().Format("15:04:05"))
+			utils.Update15MEMAToDB(client, db, float64(limitVolume), klinesCount, volumeCache, slipCoin)
 			if err := runScan(client); err != nil {
 				progressLogger.Printf("对齐 runScan 出错: %v", err)
 			}
@@ -106,6 +107,7 @@ func main() {
 			for t := range ticker.C {
 				progressLogger.Printf("[runScan] 每15分钟触发: %s", t.Format("15:04:05"))
 				go func() {
+					utils.Update15MEMAToDB(client, db, float64(limitVolume), klinesCount, volumeCache, slipCoin)
 					if err := runScan(client); err != nil {
 						progressLogger.Printf("周期 runScan 出错: %v", err)
 					}
