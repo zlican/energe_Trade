@@ -11,7 +11,7 @@ import (
 	"energe/types"
 )
 
-func PushTelegram(results []types.CoinIndicator, botToken, chatID string, volumeCache *types.VolumeCache, db *sql.DB, btctrend types.BTCTrend) error {
+func PushTelegram(results []types.CoinIndicator, botToken, high_profit_srsi_botToken, chatID string, volumeCache *types.VolumeCache, db *sql.DB, btctrend types.BTCTrend) error {
 	now := time.Now().Format("2006-01-02 15:04")
 	var msgBuilder strings.Builder
 
@@ -32,7 +32,7 @@ func PushTelegram(results []types.CoinIndicator, botToken, chatID string, volume
 			continue
 		}
 		volume, ok := volumeCache.Get(r.Symbol)
-		if !ok || volume < 100000000 {
+		if !ok || volume < 150000000 {
 			continue
 		}
 
@@ -49,6 +49,10 @@ func PushTelegram(results []types.CoinIndicator, botToken, chatID string, volume
 			} else {
 				line = fmt.Sprintf("🔴%-4s %-10s (%4s)", r.Operation, r.Symbol, r.Status)
 			}
+		} else if operation == "LongBuy" {
+			line = fmt.Sprintf("🟢%-4s %-10s (%4s)", r.Operation, r.Symbol, r.Status)
+		} else if operation == "LongSell" {
+			line = fmt.Sprintf("🔴%-4s %-10s (%4s)", r.Operation, r.Symbol, r.Status)
 		} else {
 			continue // 忽略非 Buy/Sell 操作
 		}

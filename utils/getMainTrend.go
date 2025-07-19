@@ -6,7 +6,7 @@ import (
 
 func GetBTCTrend(db *sql.DB) string {
 	priceGT_EMA25 := GetPriceGT_EMA25FromDB(db, "BTCUSDT")
-	ema25M15, ema50M15 := Get15MEMAFromDB(db, "BTCUSDT")
+	ema25M15, ema50M15, _ := Get15MEMAFromDB(db, "BTCUSDT")
 	ema25M5, ema50M5 := Get5MEMAFromDB(db, "BTCUSDT")
 
 	TrendUP := priceGT_EMA25 && ema25M15 > ema50M15 && ema25M5 > ema50M5

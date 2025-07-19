@@ -57,19 +57,22 @@ func Update1hEMA25ToDB(client *futures.Client, db *sql.DB, limitVolume float64, 
 		lastEMA25 := ema25[len(ema25)-1]
 		lastEMA50 := ema50[len(ema50)-1]
 		lastTime := klines[len(klines)-1].CloseTime
+		_, kLine, _ := StochRSIFromClose(closes, 14, 14, 3, 3)
+		lastKLine := kLine[len(kLine)-1]
 
 		// 写入数据库（UPSERT）
 		_, err = model.DB.Exec(`
-		INSERT INTO symbol_ema_1h (symbol, timestamp, ema25, ema50, price_gt_ema25)
-		VALUES (?, ?, ?, ?, ?)
+		INSERT INTO symbol_ema_1h (symbol, timestamp, ema25, ema50, srsi, price_gt_ema25)
+		VALUES (?, ?, ?, ?, ?, ?)
 		ON DUPLICATE KEY UPDATE
 		timestamp = VALUES(timestamp),
 		ema25 = VALUES(ema25),
 		ema50 = VALUES(ema50),
+		srsi = VALUES(srsi),
 		price_gt_ema25 = VALUES(price_gt_ema25)
-	`, symbol, lastTime, lastEMA25, lastEMA50, currentPrice > lastEMA25)
+	`, symbol, lastTime, lastEMA25, lastEMA50, lastKLine, currentPrice > lastEMA25)
 		if err != nil {
-			log.Printf("写入 EMA25 出错 %s: %v", symbol, err)
+			log.Printf("写入 1H 数据库 出错 %s: %v", symbol, err)
 		}
 	}
 }
@@ -91,4 +94,13 @@ func GetPriceGT_EMA25FromDB(db *sql.DB, symbol string) bool {
 		return false
 	}
 	return priceGT_EMA25
+}
+
+func Get1HSRSIFromDB(db *sql.DB, symbol string) (srsi float64) {
+	err := db.QueryRow("SELECT srsi FROM symbol_ema_1h WHERE symbol = ?", symbol).Scan(&srsi)
+	if err != nil {
+		log.Printf("查询 SRSIFromDB 失败 %s: %v", symbol, err)
+		return 0
+	}
+	return srsi
 }
