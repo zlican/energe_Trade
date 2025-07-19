@@ -17,14 +17,14 @@ func PushTelegram(results []types.CoinIndicator, botToken, high_profit_srsi_botT
 
 	var trend string
 	if btctrend.MapTrend["BTCUSDT"] == "up" {
-		trend = "🟢上升趋势"
+		trend = "🟢BTC上升趋势"
 	} else if btctrend.MapTrend["BTCUSDT"] == "down" {
-		trend = "🔴下跌趋势"
+		trend = "🔴BTC下跌趋势"
 	} else {
-		trend = "随机漫步"
+		trend = "⚪BTC随机漫步"
 	}
 
-	msgBuilder.WriteString(fmt.Sprintf("BTC:%s（%s）👇\n", trend, now))
+	msgBuilder.WriteString(fmt.Sprintf("%s（%s）👇\n", trend, now))
 
 	for _, r := range results {
 		operation := r.Operation
