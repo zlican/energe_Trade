@@ -65,7 +65,9 @@ func WaitEnerge(resultsChan chan []types.CoinIndicator, db *sql.DB, wait_sucess_
 			waitMu.Lock()
 			for _, coin := range newResults {
 				if coin.Status == "Wait" {
-					if _, exists := waitList[coin.Symbol]; !exists {
+					existing, exists := waitList[coin.Symbol]
+					if !exists {
+						// 不存在，直接添加
 						waitList[coin.Symbol] = waitToken{
 							Symbol:    coin.Symbol,
 							Operation: coin.Operation,
@@ -73,7 +75,16 @@ func WaitEnerge(resultsChan chan []types.CoinIndicator, db *sql.DB, wait_sucess_
 						}
 						log.Printf("✅ 添加等待代币: %s", coin.Symbol)
 						newAdded = true
-					}
+					} else if existing.Operation != coin.Operation {
+						// 存在但操作不同，用新的替代
+						waitList[coin.Symbol] = waitToken{
+							Symbol:    coin.Symbol,
+							Operation: coin.Operation,
+							AddedAt:   now,
+						}
+						log.Printf("🔁 替换操作不同的等待代币: %s (%s → %s)", coin.Symbol, existing.Operation, coin.Operation)
+						newAdded = true
+					} // 否则操作相同，不做处理
 				}
 			}
 			waitMu.Unlock()
