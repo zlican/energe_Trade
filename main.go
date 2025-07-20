@@ -47,7 +47,8 @@ var (
 		"WLDUSDT", "FILUSDT", "TAOUSDT", "CRVUSDT", "FETUSDT", "INJUSDT", "1000BONKUSDC",
 		"SPXUSDT", "TONUSDT", "ETCUSDT", "PUMPUSDT", "ENAUSDT", "LDOUSDT", "NEIROUSDT", "AAVEUSDT",
 		"UNIUSDT", "APTUSDT", "TRUMPUSDT", "DOGEUSDC", "VIRTUALUSDT", "SEIUSDT", "WIFUSDT",
-		"ONDOUSDT", "MOODENGUSDT", "PENGUUSDT", "NEIROETHUSDT"} // 想排除的币放这里
+		"ONDOUSDT", "MOODENGUSDT", "PENGUUSDT", "NEIROETHUSDT", "CROSSUSDT", "SUIUSDT", "OPUSDT",
+		"FXSUSDT", "DOGEUSDT"} // 想排除的币放这里
 	muVolumeMap    sync.Mutex
 	progressLogger = log.New(os.Stdout, "[Screener] ", log.LstdFlags)
 	db             *sql.DB
@@ -182,7 +183,7 @@ func runScan(client *futures.Client) error {
 			defer wg.Done()
 			defer sem.Release(1)
 
-			ind, ok := analyseSymbol(client, sym, "15m", db, btctrend)
+			ind, ok := analyseSymbol(client, sym, "1m", db, btctrend)
 			if ok {
 				resMu.Lock()
 				results = append(results, ind)
@@ -218,6 +219,8 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, btctre
 	}
 
 	price := closes[len(closes)-1]
+	EMA25M1 := utils.CalculateEMA(closes, 25)
+	EMA50M1 := utils.CalculateEMA(closes, 50)
 	ema25M15, ema50M15, ema169M15 := utils.Get15MEMAFromDB(db, symbol)
 	ema25M1H, ema50M1H := utils.Get1HEMAFromDB(db, symbol)
 	ema25M5, ema50M5 := utils.Get5MEMAFromDB(db, symbol)
@@ -233,15 +236,15 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, btctre
 	var srsi15M, srsi1H float64
 	srsi15M = utils.Get15SRSIFromDB(db, symbol)
 
-	buyCond := srsi15M < 25 || srsi15M < 20
-	sellCond := srsi15M > 75 || srsi15M > 80
+	buyCond := srsi15M < 25
+	sellCond := srsi15M > 75
 
 	//左侧高性价比模型
 	longUp := ema25M1H > ema50M1H && price > ema169M15
 	longSell := ema25M1H < ema50M1H && price < ema169M15
 
-	longBuyCond := srsi1H < 20 && (srsi15M < 25 || srsi15M < 20)
-	longSellCond := srsi1H > 80 && (srsi15M > 75 || srsi15M > 80)
+	longBuyCond := srsi1H < 20 && srsi15M < 25
+	longSellCond := srsi1H > 80 && srsi15M > 75
 
 	// ---------- 判定BTC趋势进行动能币过滤 ----------
 	var MainTrend string
@@ -263,13 +266,6 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, btctre
 		}
 
 		progressLogger.Printf("BUY 触发: %s %.2f", symbol, price) // 👈
-		_, closes, err := utils.GetKlinesByAPI(client, symbol, "1m", klinesCount)
-		if err != nil {
-			log.Printf("❌ 获取K线失败: %s", symbol)
-			return types.CoinIndicator{}, false
-		}
-		EMA25M1 := utils.CalculateEMA(closes, 25)
-		EMA50M1 := utils.CalculateEMA(closes, 50)
 		if ema25M5 > ema50M5 && price > ema25M15 && EMA25M1[len(EMA25M1)-1] > EMA50M1[len(EMA50M1)-1] {
 			//5分钟金叉，1分钟金叉，价格站上15分钟
 			status = "Soon"
@@ -291,13 +287,6 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, btctre
 		}
 
 		progressLogger.Printf("SELL 触发: %s %.2f", symbol, price) // 👈
-		_, closes, err := utils.GetKlinesByAPI(client, symbol, "1m", klinesCount)
-		if err != nil {
-			log.Printf("❌ 获取K线失败: %s", symbol)
-			return types.CoinIndicator{}, false
-		}
-		EMA25M1 := utils.CalculateEMA(closes, 25)
-		EMA50M1 := utils.CalculateEMA(closes, 50)
 		if ema25M5 < ema50M5 && price < ema25M15 && EMA25M1[len(EMA25M1)-1] < EMA50M1[len(EMA50M1)-1] {
 			//5分钟死叉，1分钟死叉，价格站下15分钟
 			status = "Soon"
@@ -313,13 +302,6 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, btctre
 			Operation:    "Sell"}, true
 	case longUp && longBuyCond:
 		progressLogger.Printf("LongBUY 触发: %s %.2f", symbol, price) // 👈
-		_, closes, err := utils.GetKlinesByAPI(client, symbol, "1m", klinesCount)
-		if err != nil {
-			log.Printf("❌ 获取K线失败: %s", symbol)
-			return types.CoinIndicator{}, false
-		}
-		EMA25M1 := utils.CalculateEMA(closes, 25)
-		EMA50M1 := utils.CalculateEMA(closes, 50)
 		if priceGT_EMA25 && ema25M5 > ema50M5 && price > ema25M15 && EMA25M1[len(EMA25M1)-1] > EMA50M1[len(EMA50M1)-1] {
 			//GT,5分钟金叉，1分钟金叉，价格站上15分钟
 			status = "LongSoon"
@@ -335,13 +317,6 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, btctre
 			Operation:    "LongBuy"}, true
 	case longSell && longSellCond:
 		progressLogger.Printf("LongSell 触发: %s %.2f", symbol, price) // 👈
-		_, closes, err := utils.GetKlinesByAPI(client, symbol, "1m", klinesCount)
-		if err != nil {
-			log.Printf("❌ 获取K线失败: %s", symbol)
-			return types.CoinIndicator{}, false
-		}
-		EMA25M1 := utils.CalculateEMA(closes, 25)
-		EMA50M1 := utils.CalculateEMA(closes, 50)
 		if !priceGT_EMA25 && ema25M5 < ema50M5 && price < ema25M15 && EMA25M1[len(EMA25M1)-1] < EMA50M1[len(EMA50M1)-1] {
 			//!GT,5分钟死叉，1分钟死叉，价格站下15分钟
 			status = "LongSoon"
