@@ -48,12 +48,12 @@ var (
 		"SPXUSDT", "TONUSDT", "ETCUSDT", "PUMPUSDT", "ENAUSDT", "LDOUSDT", "NEIROUSDT", "AAVEUSDT",
 		"UNIUSDT", "APTUSDT", "TRUMPUSDT", "DOGEUSDC", "VIRTUALUSDT", "SEIUSDT", "WIFUSDT",
 		"ONDOUSDT", "MOODENGUSDT", "PENGUUSDT", "NEIROETHUSDT", "CROSSUSDT", "SUIUSDT", "OPUSDT",
-		"FXSUSDT", "DOGEUSDT", "SOLUSDT"} // 想排除的币放这里
+		"FXSUSDT", "DOGEUSDT"} // 想排除的币放这里
 	muVolumeMap    sync.Mutex
 	progressLogger = log.New(os.Stdout, "[Screener] ", log.LstdFlags)
 	db             *sql.DB
 	waitChan       = make(chan []types.CoinIndicator, 30) //等待区
-	btctrend       types.BTCTrend
+	bestrend       types.BESTrend
 )
 
 /* ====================== 主函数 ====================== */
@@ -158,10 +158,10 @@ func runScan(client *futures.Client) error {
 	progressLogger.Printf("USDT 交易对数量: %d", len(symbols))
 
 	// ---------- 2. 获取趋势 ----------
-	btctrend = types.BTCTrend{
-		MapTrend: map[string]string{
-			"BTCUSDT": utils.GetBTCTrend(db),
-		},
+	bestrend = types.BESTrend{
+		BTC: utils.GetBTCTrend(db),
+		ETH: utils.GetETHTrend(db),
+		SOL: utils.GetSOLTrend(db),
 	}
 
 	// ---------- 3. 并发处理 ----------
@@ -183,7 +183,7 @@ func runScan(client *futures.Client) error {
 			defer wg.Done()
 			defer sem.Release(1)
 
-			ind, ok := analyseSymbol(client, sym, "1m", db, btctrend)
+			ind, ok := analyseSymbol(client, sym, "1m", db, bestrend)
 			if ok {
 				resMu.Lock()
 				results = append(results, ind)
@@ -206,12 +206,12 @@ func runScan(client *futures.Client) error {
 	})
 
 	// ---------- 4. 推送到 Telegram ----------
-	return utils.PushTelegram(results, botToken, high_profit_srsi_botToken, chatID, volumeCache, db, btctrend)
+	return utils.PushTelegram(results, botToken, high_profit_srsi_botToken, chatID, volumeCache, db, bestrend)
 }
 
 /* ====================== 单币分析 ====================== */
 
-func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, btctrend types.BTCTrend) (types.CoinIndicator, bool) {
+func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestrend types.BESTrend) (types.CoinIndicator, bool) {
 
 	_, closes, err := utils.GetKlinesByAPI(client, symbol, tf, klinesCount)
 	if err != nil || len(closes) < 2 {
@@ -246,28 +246,21 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, btctre
 	longBuyCond := srsi1H < 20 && srsi15M < 25
 	longSellCond := srsi1H > 80 && srsi15M > 75
 
-	// ---------- 判定BTC趋势进行动能币过滤 ----------
-	/* 	var MainTrend string
-	   	if btctrend.MapTrend["BTCUSDT"] == "up" {
-	   		MainTrend = "up"
-	   	} else if btctrend.MapTrend["BTCUSDT"] == "down" {
-	   		MainTrend = "down"
-	   	} else {
-	   		MainTrend = "none"
-	   	} */
+	// ---------- 判定BES趋势进行动能币过滤 ----------
+	MainTrend := utils.GetMainTrend(bestrend)
 
 	var status string
 	switch {
 	case up && buyCond:
-		/* 		if MainTrend == "up" {
-			if symbol != "BTCUSDT" && symbol != "ETHUSDT" {
+		if MainTrend == "up" {
+			if symbol != "BTCUSDT" && symbol != "ETHUSDT" && symbol != "SOLUSDT" {
 				return types.CoinIndicator{}, false
 			}
-		} */
+		}
 
 		progressLogger.Printf("BUY 触发: %s %.2f", symbol, price) // 👈
 		if ema25M5 > ema50M5 && price > ema25M15 {
-			//5分钟金叉，价格站上15分钟（BE长龙或者，动能破死）
+			//5分钟金叉，价格站上15分钟（BES长龙或者，动能破死）
 			status = "Soon"
 		} else {
 			status = "Wait"
@@ -280,15 +273,15 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, btctre
 			Status:       status,
 			Operation:    "Buy"}, true
 	case down && sellCond:
-		/* 		if MainTrend == "down" {
-			if symbol != "BTCUSDT" && symbol != "ETHUSDT" {
+		if MainTrend == "down" {
+			if symbol != "BTCUSDT" && symbol != "ETHUSDT" && symbol != "SOLUSDT" {
 				return types.CoinIndicator{}, false
 			}
-		} */
+		}
 
 		progressLogger.Printf("SELL 触发: %s %.2f", symbol, price) // 👈
 		if ema25M5 < ema50M5 && price < ema25M15 {
-			//5分钟死叉，价格站下15分钟（BE长龙或者，动能破死）
+			//5分钟死叉，价格站下15分钟（BES长龙或者，动能破死）
 			status = "Soon"
 		} else {
 			status = "Wait"
@@ -301,6 +294,11 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, btctre
 			Status:       status,
 			Operation:    "Sell"}, true
 	case longUp && longBuyCond:
+		if MainTrend == "up" {
+			if symbol != "BTCUSDT" && symbol != "ETHUSDT" && symbol != "SOLUSDT" {
+				return types.CoinIndicator{}, false
+			}
+		}
 		progressLogger.Printf("LongBUY 触发: %s %.2f", symbol, price) // 👈
 		if priceGT_EMA25 && ema25M5 > ema50M5 && price > ema25M15 && EMA25M1[len(EMA25M1)-1] > EMA50M1[len(EMA50M1)-1] {
 			//GT,5分钟金叉，1分钟金叉，价格站上15分钟
@@ -316,6 +314,11 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, btctre
 			Status:       status,
 			Operation:    "LongBuy"}, true
 	case longSell && longSellCond:
+		if MainTrend == "down" {
+			if symbol != "BTCUSDT" && symbol != "ETHUSDT" && symbol != "SOLUSDT" {
+				return types.CoinIndicator{}, false
+			}
+		}
 		progressLogger.Printf("LongSell 触发: %s %.2f", symbol, price) // 👈
 		if !priceGT_EMA25 && ema25M5 < ema50M5 && price < ema25M15 && EMA25M1[len(EMA25M1)-1] < EMA50M1[len(EMA50M1)-1] {
 			//!GT,5分钟死叉，1分钟死叉，价格站下15分钟

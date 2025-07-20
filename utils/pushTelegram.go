@@ -11,20 +11,42 @@ import (
 	"energe/types"
 )
 
-func PushTelegram(results []types.CoinIndicator, botToken, high_profit_srsi_botToken, chatID string, volumeCache *types.VolumeCache, db *sql.DB, btctrend types.BTCTrend) error {
+func PushTelegram(results []types.CoinIndicator, botToken, high_profit_srsi_botToken, chatID string, volumeCache *types.VolumeCache, db *sql.DB, bestrend types.BESTrend) error {
 	now := time.Now().Format("2006-01-02 15:04")
 	var msgBuilder strings.Builder
 
-	var trend string
-	if btctrend.MapTrend["BTCUSDT"] == "up" {
-		trend = "🟢BTC上升趋势"
-	} else if btctrend.MapTrend["BTCUSDT"] == "down" {
-		trend = "🔴BTC下跌趋势"
-	} else {
-		trend = "⚪BTC随机漫步"
+	// ---------- 添加主趋势播报 ----------
+	var upCoins []string
+	var downCoins []string
+
+	if bestrend.BTC == "up" {
+		upCoins = append(upCoins, "BTC")
+	} else if bestrend.BTC == "down" {
+		downCoins = append(downCoins, "BTC")
+	}
+	if bestrend.ETH == "up" {
+		upCoins = append(upCoins, "ETH")
+	} else if bestrend.ETH == "down" {
+		downCoins = append(downCoins, "ETH")
+	}
+	if bestrend.SOL == "up" {
+		upCoins = append(upCoins, "SOL")
+	} else if bestrend.SOL == "down" {
+		downCoins = append(downCoins, "SOL")
 	}
 
-	msgBuilder.WriteString(fmt.Sprintf("%s（%s）\n", trend, now))
+	var trendLine string
+	switch {
+	case len(upCoins) > 0:
+		trendLine = fmt.Sprintf("🟢 BES趋势：上涨（%s）", strings.Join(upCoins, ", "))
+	case len(downCoins) > 0:
+		trendLine = fmt.Sprintf("🔴 BES趋势：下跌（%s）", strings.Join(downCoins, ", "))
+	default:
+		trendLine = "⚪️ BES趋势：随机漫步"
+	}
+
+	msgBuilder.WriteString(fmt.Sprintf("%s（%s）\n", trendLine, now))
+	msgBuilder.WriteString("\n")
 
 	for _, r := range results {
 		operation := r.Operation
