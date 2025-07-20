@@ -48,7 +48,7 @@ var (
 		"SPXUSDT", "TONUSDT", "ETCUSDT", "PUMPUSDT", "ENAUSDT", "LDOUSDT", "NEIROUSDT", "AAVEUSDT",
 		"UNIUSDT", "APTUSDT", "TRUMPUSDT", "DOGEUSDC", "VIRTUALUSDT", "SEIUSDT", "WIFUSDT",
 		"ONDOUSDT", "MOODENGUSDT", "PENGUUSDT", "NEIROETHUSDT", "CROSSUSDT", "SUIUSDT", "OPUSDT",
-		"FXSUSDT", "DOGEUSDT"} // 想排除的币放这里
+		"FXSUSDT", "DOGEUSDT", "SOLUSDT"} // 想排除的币放这里
 	muVolumeMap    sync.Mutex
 	progressLogger = log.New(os.Stdout, "[Screener] ", log.LstdFlags)
 	db             *sql.DB
@@ -247,27 +247,27 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, btctre
 	longSellCond := srsi1H > 80 && srsi15M > 75
 
 	// ---------- 判定BTC趋势进行动能币过滤 ----------
-	var MainTrend string
-	if btctrend.MapTrend["BTCUSDT"] == "up" {
-		MainTrend = "up"
-	} else if btctrend.MapTrend["BTCUSDT"] == "down" {
-		MainTrend = "down"
-	} else {
-		MainTrend = "none"
-	}
+	/* 	var MainTrend string
+	   	if btctrend.MapTrend["BTCUSDT"] == "up" {
+	   		MainTrend = "up"
+	   	} else if btctrend.MapTrend["BTCUSDT"] == "down" {
+	   		MainTrend = "down"
+	   	} else {
+	   		MainTrend = "none"
+	   	} */
 
 	var status string
 	switch {
 	case up && buyCond:
-		if MainTrend == "up" {
+		/* 		if MainTrend == "up" {
 			if symbol != "BTCUSDT" && symbol != "ETHUSDT" {
 				return types.CoinIndicator{}, false
 			}
-		}
+		} */
 
 		progressLogger.Printf("BUY 触发: %s %.2f", symbol, price) // 👈
-		if ema25M5 > ema50M5 && price > ema25M15 && EMA25M1[len(EMA25M1)-1] > EMA50M1[len(EMA50M1)-1] {
-			//5分钟金叉，1分钟金叉，价格站上15分钟
+		if ema25M5 > ema50M5 && price > ema25M15 {
+			//5分钟金叉，价格站上15分钟（BE长龙或者，动能破死）
 			status = "Soon"
 		} else {
 			status = "Wait"
@@ -280,15 +280,15 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, btctre
 			Status:       status,
 			Operation:    "Buy"}, true
 	case down && sellCond:
-		if MainTrend == "down" {
+		/* 		if MainTrend == "down" {
 			if symbol != "BTCUSDT" && symbol != "ETHUSDT" {
 				return types.CoinIndicator{}, false
 			}
-		}
+		} */
 
 		progressLogger.Printf("SELL 触发: %s %.2f", symbol, price) // 👈
-		if ema25M5 < ema50M5 && price < ema25M15 && EMA25M1[len(EMA25M1)-1] < EMA50M1[len(EMA50M1)-1] {
-			//5分钟死叉，1分钟死叉，价格站下15分钟
+		if ema25M5 < ema50M5 && price < ema25M15 {
+			//5分钟死叉，价格站下15分钟（BE长龙或者，动能破死）
 			status = "Soon"
 		} else {
 			status = "Wait"
