@@ -16,32 +16,27 @@ func PushTelegram(results []types.CoinIndicator, botToken, high_profit_srsi_botT
 	var msgBuilder strings.Builder
 
 	// ---------- 添加主趋势播报 ----------
-	var upCoins []string
-	var downCoins []string
+	var btcLine, ethLine string
 
-	if betrend.BTC == "up" {
-		upCoins = append(upCoins, "BTC")
-	} else if betrend.BTC == "down" {
-		downCoins = append(downCoins, "BTC")
-	}
-	if betrend.ETH == "up" {
-		upCoins = append(upCoins, "ETH")
-	} else if betrend.ETH == "down" {
-		downCoins = append(downCoins, "ETH")
-	}
-
-	var trendLine string
-	switch {
-	case len(upCoins) > 0:
-		trendLine = fmt.Sprintf("🟢 BE趋势：强势上涨（%s）", strings.Join(upCoins, ", "))
-	case len(downCoins) > 0:
-		trendLine = fmt.Sprintf("🔴 BE趋势：强势下跌（%s）", strings.Join(downCoins, ", "))
+	switch betrend.BTC {
+	case "up":
+		btcLine = "🟢 BTC趋势：强势上涨"
+	case "down":
+		btcLine = "🔴 BTC趋势：强势下跌"
 	default:
-		trendLine = "⚪️ BE趋势：随机漫步"
+		btcLine = "⚪️ BTC趋势：随机漫步"
 	}
 
-	msgBuilder.WriteString(fmt.Sprintf("%s\n 🎈Time:%s\n", trendLine, now))
-	msgBuilder.WriteString("\n")
+	switch betrend.ETH {
+	case "up":
+		ethLine = "🟢 ETH趋势：强势上涨"
+	case "down":
+		ethLine = "🔴 ETH趋势：强势下跌"
+	default:
+		ethLine = "⚪️ ETH趋势：随机漫步"
+	}
+
+	msgBuilder.WriteString(fmt.Sprintf("%s\n%s\n🎈Time：%s\n\n", btcLine, ethLine, now))
 
 	for _, r := range results {
 		operation := r.Operation

@@ -6,12 +6,12 @@ import (
 )
 
 func GetBTCTrend(db *sql.DB) string {
-	ema25MH1, ema50MH1 := Get1HEMAFromDB(db, "BTCUSDT")
+	GT_BTC := GetPriceGT_EMA25FromDB(db, "BTCUSDT")
 	ema25M15, ema50M15, _ := Get15MEMAFromDB(db, "BTCUSDT")
 	ema25M5, ema50M5 := Get5MEMAFromDB(db, "BTCUSDT")
 
-	TrendUP := ema25MH1 > ema50MH1 && ema25M15 > ema50M15 && ema25M5 > ema50M5
-	TrendDown := ema25MH1 < ema50MH1 && ema25M15 < ema50M15 && ema25M5 < ema50M5
+	TrendUP := GT_BTC && ema25M15 > ema50M15 && ema25M5 > ema50M5
+	TrendDown := !GT_BTC && ema25M15 < ema50M15 && ema25M5 < ema50M5
 
 	if TrendUP {
 		return "up"
@@ -22,12 +22,12 @@ func GetBTCTrend(db *sql.DB) string {
 }
 
 func GetETHTrend(db *sql.DB) string {
-	ema25MH1, ema50MH1 := Get1HEMAFromDB(db, "ETHUSDT")
+	GT_ETH := GetPriceGT_EMA25FromDB(db, "ETHUSDT")
 	ema25M15, ema50M15, _ := Get15MEMAFromDB(db, "ETHUSDT")
 	ema25M5, ema50M5 := Get5MEMAFromDB(db, "ETHUSDT")
 
-	TrendUP := ema25MH1 > ema50MH1 && ema25M15 > ema50M15 && ema25M5 > ema50M5
-	TrendDown := ema25MH1 < ema50MH1 && ema25M15 < ema50M15 && ema25M5 < ema50M5
+	TrendUP := GT_ETH && ema25M15 > ema50M15 && ema25M5 > ema50M5
+	TrendDown := !GT_ETH && ema25M15 < ema50M15 && ema25M5 < ema50M5
 
 	if TrendUP {
 		return "up"
