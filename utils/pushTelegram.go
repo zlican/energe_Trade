@@ -11,7 +11,7 @@ import (
 	"energe/types"
 )
 
-func PushTelegram(results []types.CoinIndicator, botToken, high_profit_srsi_botToken, chatID string, volumeCache *types.VolumeCache, db *sql.DB, bestrend types.BESTrend) error {
+func PushTelegram(results []types.CoinIndicator, botToken, high_profit_srsi_botToken, chatID string, volumeCache *types.VolumeCache, db *sql.DB, betrend types.BETrend) error {
 	now := time.Now().Format("2006-01-02 15:04")
 	var msgBuilder strings.Builder
 
@@ -19,33 +19,28 @@ func PushTelegram(results []types.CoinIndicator, botToken, high_profit_srsi_botT
 	var upCoins []string
 	var downCoins []string
 
-	if bestrend.BTC == "up" {
+	if betrend.BTC == "up" {
 		upCoins = append(upCoins, "BTC")
-	} else if bestrend.BTC == "down" {
+	} else if betrend.BTC == "down" {
 		downCoins = append(downCoins, "BTC")
 	}
-	if bestrend.ETH == "up" {
+	if betrend.ETH == "up" {
 		upCoins = append(upCoins, "ETH")
-	} else if bestrend.ETH == "down" {
+	} else if betrend.ETH == "down" {
 		downCoins = append(downCoins, "ETH")
-	}
-	if bestrend.SOL == "up" {
-		upCoins = append(upCoins, "SOL")
-	} else if bestrend.SOL == "down" {
-		downCoins = append(downCoins, "SOL")
 	}
 
 	var trendLine string
 	switch {
 	case len(upCoins) > 0:
-		trendLine = fmt.Sprintf("🟢 BES趋势：上涨（%s）", strings.Join(upCoins, ", "))
+		trendLine = fmt.Sprintf("🟢 BE趋势：强势上涨（%s）", strings.Join(upCoins, ", "))
 	case len(downCoins) > 0:
-		trendLine = fmt.Sprintf("🔴 BES趋势：下跌（%s）", strings.Join(downCoins, ", "))
+		trendLine = fmt.Sprintf("🔴 BE趋势：强势下跌（%s）", strings.Join(downCoins, ", "))
 	default:
-		trendLine = "⚪️ BES趋势：随机漫步"
+		trendLine = "⚪️ BE趋势：随机漫步"
 	}
 
-	msgBuilder.WriteString(fmt.Sprintf("%s（%s）\n", trendLine, now))
+	msgBuilder.WriteString(fmt.Sprintf("%s\n 🎈Time:%s\n", trendLine, now))
 	msgBuilder.WriteString("\n")
 
 	for _, r := range results {
@@ -54,20 +49,20 @@ func PushTelegram(results []types.CoinIndicator, botToken, high_profit_srsi_botT
 			continue
 		}
 		volume, ok := volumeCache.Get(r.Symbol)
-		if !ok || volume < 150000000 {
+		if !ok || volume < 200000000 {
 			continue
 		}
 
 		var line string
 		if operation == "Buy" {
 			if r.Symbol == "BTCUSDT" || r.Symbol == "ETHUSDT" {
-				line = fmt.Sprintf("💎%-4s %-10s (%4s)", r.Operation, r.Symbol, r.Status)
+				line = fmt.Sprintf("💎🟢%-4s %-10s (%4s)", r.Operation, r.Symbol, r.Status)
 			} else {
 				line = fmt.Sprintf("🟢%-4s %-10s (%4s)", r.Operation, r.Symbol, r.Status)
 			}
 		} else if operation == "Sell" {
 			if r.Symbol == "BTCUSDT" || r.Symbol == "ETHUSDT" {
-				line = fmt.Sprintf("💎%-4s %-10s (%4s)", r.Operation, r.Symbol, r.Status)
+				line = fmt.Sprintf("💎🔴%-4s %-10s (%4s)", r.Operation, r.Symbol, r.Status)
 			} else {
 				line = fmt.Sprintf("🔴%-4s %-10s (%4s)", r.Operation, r.Symbol, r.Status)
 			}

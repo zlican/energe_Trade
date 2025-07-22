@@ -1,7 +1,6 @@
 package types
 
-type BESTrend struct {
+type BETrend struct {
 	BTC string
 	ETH string
-	SOL string
 }
