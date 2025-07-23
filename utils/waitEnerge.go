@@ -125,8 +125,8 @@ func WaitEnerge(resultsChan chan []types.CoinIndicator, db *sql.DB, wait_sucess_
 
 					switch token.Operation {
 					case "Buy":
-						if priceGT && price1 > ema25M15 && price1 > ema25M5 && ema25M5 > ema50M5 && UpMACD {
-							//1小时GT，15分钟站上，5分钟站上, 5分钟金叉
+						if priceGT && price1 > ema25M15 && ema25M5 > ema50M5 && UpMACD {
+							//1小时GT，15分钟站上，5分钟金叉
 							msg := fmt.Sprintf("🟢%s \n价格：%.4f  时间：%s", sym, price1, now.Format("15:04"))
 							telegram.SendMessage(wait_sucess_token, chatID, msg)
 							log.Printf("🟢 等待成功 Buy : %s", sym)
@@ -142,8 +142,8 @@ func WaitEnerge(resultsChan chan []types.CoinIndicator, db *sql.DB, wait_sucess_
 							changed = true
 						}
 					case "Sell":
-						if !priceGT && price1 < ema25M15 && price1 < ema25M5 && ema25M5 < ema50M5 && DownMACD {
-							//1小时非GT，15分钟站下，5分钟站下， 5分钟死叉
+						if !priceGT && price1 < ema25M15 && ema25M5 < ema50M5 && DownMACD {
+							//1小时非GT，15分钟站下，5分钟死叉
 							msg := fmt.Sprintf("🔴%s \n价格：%.4f  时间：%s", sym, price1, now.Format("15:04"))
 							telegram.SendMessage(wait_sucess_token, chatID, msg)
 							log.Printf("🔴 等待成功 Sell : %s", sym)
@@ -159,8 +159,8 @@ func WaitEnerge(resultsChan chan []types.CoinIndicator, db *sql.DB, wait_sucess_
 							changed = true
 						}
 					case "LongBuy":
-						if priceGT && price1 > ema25M15 && price1 > ema25M5 && ema25M5 > ema50M5 && UpMACD {
-							//1小时GT，15分钟站上，5分钟站上, 5分钟金叉
+						if priceGT && price1 > ema25M15 && ema25M5 > ema50M5 && UpMACD {
+							//1小时GT，15分钟站上， 5分钟金叉
 							msg := fmt.Sprintf("🟢%s \n价格：%.4f  时间：%s", sym, price1, now.Format("15:04"))
 							telegram.SendMessage(wait_sucess_token, chatID, msg)
 							log.Printf("🟢 等待成功 Buy : %s", sym)
@@ -176,7 +176,7 @@ func WaitEnerge(resultsChan chan []types.CoinIndicator, db *sql.DB, wait_sucess_
 							changed = true
 						}
 					case "LongSell":
-						if !priceGT && price1 < ema25M15 && price1 < ema25M5 && ema25M5 < ema50M5 && DownMACD {
+						if !priceGT && price1 < ema25M15 && ema25M5 < ema50M5 && DownMACD {
 							//1小时非GT，15分钟站下，5分钟站下, 5分钟死叉
 							msg := fmt.Sprintf("🔴%s \n价格：%.4f  时间：%s", sym, price1, now.Format("15:04"))
 							telegram.SendMessage(wait_sucess_token, chatID, msg)
