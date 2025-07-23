@@ -182,7 +182,7 @@ func runScan(client *futures.Client) error {
 			defer wg.Done()
 			defer sem.Release(1)
 
-			ind, ok := analyseSymbol(client, sym, "1m", db, betrend)
+			ind, ok := analyseSymbol(client, sym, "15m", db, betrend)
 			if ok {
 				resMu.Lock()
 				results = append(results, ind)
@@ -218,8 +218,6 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 	}
 
 	price := closes[len(closes)-1]
-	EMA25M1 := utils.CalculateEMA(closes, 25)
-	EMA50M1 := utils.CalculateEMA(closes, 50)
 	ema25M15, ema50M15, ema169M15 := utils.Get15MEMAFromDB(db, symbol)
 	ema25M1H, ema50M1H := utils.Get1HEMAFromDB(db, symbol)
 	ema25M5, ema50M5 := utils.Get5MEMAFromDB(db, symbol)
@@ -245,21 +243,25 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 	longBuyCond := srsi1H < 20 && srsi15M < 25
 	longSellCond := srsi1H > 80 && srsi15M > 75
 
+	//MACD模型
+	UpMACD := utils.IsAboutToGoldenCross(closes, 6, 13, 5)
+	DownMACD := utils.IsAboutToDeadCross(closes, 6, 13, 5)
+
 	// ---------- 判定BES趋势进行动能币过滤 ----------
 	//MainTrend := utils.GetMainTrend(bestrend)
 
 	var status string
 	switch {
 	case up && buyCond:
-		// 如果 BTC 或 ETH 有一个趋势明确（非“随机漫步”），只保留它们两个，其它币种不分析
-		if (betrend.BTC == "up" || betrend.BTC == "down" || betrend.ETH == "up" || betrend.ETH == "down") &&
-			symbol != "BTCUSDT" && symbol != "ETHUSDT" {
-			return types.CoinIndicator{}, false
-		}
+		/* 		// 如果 BTC 或 ETH 有一个趋势明确（非“随机漫步”），只保留它们两个，其它币种不分析
+		   		if (betrend.BTC == "up" || betrend.BTC == "down" || betrend.ETH == "up" || betrend.ETH == "down") &&
+		   			symbol != "BTCUSDT" && symbol != "ETHUSDT" {
+		   			return types.CoinIndicator{}, false
+		   		} */
 
 		progressLogger.Printf("BUY 触发: %s %.2f", symbol, price) // 👈
-		if ema25M5 > ema50M5 && price > ema25M15 {
-			//5分钟金叉，价格站上15分钟（BES长龙或者，动能破死）
+		if ema25M5 > ema50M5 && price > ema25M15 && UpMACD {
+			//5分钟金叉，价格站上15分钟
 			status = "Soon"
 		} else {
 			status = "Wait"
@@ -278,8 +280,8 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 		}
 
 		progressLogger.Printf("SELL 触发: %s %.2f", symbol, price) // 👈
-		if ema25M5 < ema50M5 && price < ema25M15 {
-			//5分钟死叉，价格站下15分钟（BES长龙或者，动能破死）
+		if ema25M5 < ema50M5 && price < ema25M15 && DownMACD {
+			//5分钟死叉，价格站下15分钟
 			status = "Soon"
 		} else {
 			status = "Wait"
@@ -292,14 +294,14 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 			Status:       status,
 			Operation:    "Sell"}, true
 	case longUp && longBuyCond:
-		// 如果 BTC 或 ETH 有一个趋势明确（非“随机漫步”），只保留它们两个，其它币种不分析
-		if (betrend.BTC == "up" || betrend.BTC == "down" || betrend.ETH == "up" || betrend.ETH == "down") &&
-			symbol != "BTCUSDT" && symbol != "ETHUSDT" {
-			return types.CoinIndicator{}, false
-		}
+		/* 		// 如果 BTC 或 ETH 有一个趋势明确（非“随机漫步”），只保留它们两个，其它币种不分析
+		   		if (betrend.BTC == "up" || betrend.BTC == "down" || betrend.ETH == "up" || betrend.ETH == "down") &&
+		   			symbol != "BTCUSDT" && symbol != "ETHUSDT" {
+		   			return types.CoinIndicator{}, false
+		   		} */
 
 		progressLogger.Printf("LongBUY 触发: %s %.2f", symbol, price) // 👈
-		if priceGT_EMA25 && ema25M5 > ema50M5 && price > ema25M15 && EMA25M1[len(EMA25M1)-1] > EMA50M1[len(EMA50M1)-1] {
+		if priceGT_EMA25 && ema25M5 > ema50M5 && price > ema25M15 && UpMACD {
 			//GT,5分钟金叉，1分钟金叉，价格站上15分钟
 			status = "LongSoon"
 		} else {
@@ -319,7 +321,7 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 		}
 
 		progressLogger.Printf("LongSell 触发: %s %.2f", symbol, price) // 👈
-		if !priceGT_EMA25 && ema25M5 < ema50M5 && price < ema25M15 && EMA25M1[len(EMA25M1)-1] < EMA50M1[len(EMA50M1)-1] {
+		if !priceGT_EMA25 && ema25M5 < ema50M5 && price < ema25M15 && DownMACD {
 			//!GT,5分钟死叉，1分钟死叉，价格站下15分钟
 			status = "LongSoon"
 		} else {

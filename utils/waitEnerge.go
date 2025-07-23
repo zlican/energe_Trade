@@ -53,7 +53,7 @@ func sendWaitListBroadcast(now time.Time, waiting_token, chatID string) {
 }
 
 func WaitEnerge(resultsChan chan []types.CoinIndicator, db *sql.DB, wait_sucess_token, chatID string, client *futures.Client, klinesCount int, waiting_token string) {
-	ticker := time.NewTicker(1 * time.Minute)
+	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
 
 	for {
@@ -107,7 +107,7 @@ func WaitEnerge(resultsChan chan []types.CoinIndicator, db *sql.DB, wait_sucess_
 				waitMu.Unlock()
 
 				for sym, token := range waitCopy {
-					_, closes, err := GetKlinesByAPI(client, sym, "1m", klinesCount)
+					_, closes, err := GetKlinesByAPI(client, sym, "15m", klinesCount)
 					if err != nil {
 						log.Printf("❌ 获取K线失败: %s", sym)
 						continue
@@ -118,161 +118,79 @@ func WaitEnerge(resultsChan chan []types.CoinIndicator, db *sql.DB, wait_sucess_
 					ema25H1, ema50H1 := Get1HEMAFromDB(db, sym)
 					ema25M15, ema50M15, _ := Get15MEMAFromDB(db, sym)
 					ema25M5, ema50M5 := Get5MEMAFromDB(db, sym)
-					EMA25M1 := CalculateEMA(closes, 25)
-					EMA50M1 := CalculateEMA(closes, 50)
+
+					//MACD
+					UpMACD := IsAboutToGoldenCross(closes, 6, 13, 5)
+					DownMACD := IsAboutToDeadCross(closes, 6, 13, 5)
 
 					switch token.Operation {
 					case "Buy":
-						if token.Symbol == "BTCUSDT" || token.Symbol == "ETHUSDT" {
-							condition3 := EMA25M1[len(EMA25M1)-1] > EMA50M1[len(EMA50M1)-1]
-							if priceGT && price1 > ema25M15 && ema25M5 > ema50M5 && condition3 {
-								//1小时GT，15分钟站上，5分钟金叉，1分钟金叉（BE）
-								msg := fmt.Sprintf("🟢%s \n价格：%.4f  时间：%s", sym, price1, now.Format("15:04"))
-								telegram.SendMessage(wait_sucess_token, chatID, msg)
-								log.Printf("🟢 等待成功 Buy : %s", sym)
-								waitMu.Lock()
-								delete(waitList, sym)
-								waitMu.Unlock()
-								changed = true
-							} else if ema25M15 < ema50M15 {
-								log.Printf("❌ Wait失败 Buy : %s", sym)
-								waitMu.Lock()
-								delete(waitList, sym)
-								waitMu.Unlock()
-								changed = true
-							}
-						} else {
-							condition3 := EMA25M1[len(EMA25M1)-1] > EMA50M1[len(EMA50M1)-1]
-							if priceGT && price1 > ema25M15 && price1 > ema25M5 && condition3 {
-								//1小时GT，15分钟站上，5分钟站上，1分钟金叉（动能币）
-								msg := fmt.Sprintf("🟢%s \n价格：%.4f  时间：%s", sym, price1, now.Format("15:04"))
-								telegram.SendMessage(wait_sucess_token, chatID, msg)
-								log.Printf("🟢 等待成功 Buy : %s", sym)
-								waitMu.Lock()
-								delete(waitList, sym)
-								waitMu.Unlock()
-								changed = true
-							} else if ema25M15 < ema50M15 {
-								log.Printf("❌ Wait失败 Buy : %s", sym)
-								waitMu.Lock()
-								delete(waitList, sym)
-								waitMu.Unlock()
-								changed = true
-							}
+						if priceGT && price1 > ema25M15 && price1 > ema25M5 && ema25M5 > ema50M5 && UpMACD {
+							//1小时GT，15分钟站上，5分钟站上, 5分钟金叉
+							msg := fmt.Sprintf("🟢%s \n价格：%.4f  时间：%s", sym, price1, now.Format("15:04"))
+							telegram.SendMessage(wait_sucess_token, chatID, msg)
+							log.Printf("🟢 等待成功 Buy : %s", sym)
+							waitMu.Lock()
+							delete(waitList, sym)
+							waitMu.Unlock()
+							changed = true
+						} else if ema25M15 < ema50M15 {
+							log.Printf("❌ Wait失败 Buy : %s", sym)
+							waitMu.Lock()
+							delete(waitList, sym)
+							waitMu.Unlock()
+							changed = true
 						}
 					case "Sell":
-						if token.Symbol == "BTCUSDT" || token.Symbol == "ETHUSDT" {
-							condition3 := EMA25M1[len(EMA25M1)-1] < EMA50M1[len(EMA50M1)-1]
-							if !priceGT && ema25M5 < ema50M5 && price1 < ema25M15 && condition3 {
-								//1小时非GT，15分钟站下，5分钟死叉，1分钟死叉
-								msg := fmt.Sprintf("🔴%s \n价格：%.4f  时间：%s", sym, price1, now.Format("15:04"))
-								telegram.SendMessage(wait_sucess_token, chatID, msg)
-								log.Printf("🔴 等待成功 Sell : %s", sym)
-								waitMu.Lock()
-								delete(waitList, sym)
-								waitMu.Unlock()
-								changed = true
-							} else if ema25M15 > ema50M15 {
-								log.Printf("❌ Wait失败 Sell : %s", sym)
-								waitMu.Lock()
-								delete(waitList, sym)
-								waitMu.Unlock()
-								changed = true
-							}
-						} else {
-							condition3 := EMA25M1[len(EMA25M1)-1] < EMA50M1[len(EMA50M1)-1]
-							if !priceGT && price1 < ema25M15 && price1 < ema25M5 && condition3 {
-								//1小时非GT，15分钟站下，5分钟站下，1分钟死叉(动能)
-								msg := fmt.Sprintf("🔴%s \n价格：%.4f  时间：%s", sym, price1, now.Format("15:04"))
-								telegram.SendMessage(wait_sucess_token, chatID, msg)
-								log.Printf("🔴 等待成功 Sell : %s", sym)
-								waitMu.Lock()
-								delete(waitList, sym)
-								waitMu.Unlock()
-								changed = true
-							} else if ema25M15 > ema50M15 {
-								log.Printf("❌ Wait失败 Sell : %s", sym)
-								waitMu.Lock()
-								delete(waitList, sym)
-								waitMu.Unlock()
-								changed = true
-							}
+						if !priceGT && price1 < ema25M15 && price1 < ema25M5 && ema25M5 < ema50M5 && DownMACD {
+							//1小时非GT，15分钟站下，5分钟站下， 5分钟死叉
+							msg := fmt.Sprintf("🔴%s \n价格：%.4f  时间：%s", sym, price1, now.Format("15:04"))
+							telegram.SendMessage(wait_sucess_token, chatID, msg)
+							log.Printf("🔴 等待成功 Sell : %s", sym)
+							waitMu.Lock()
+							delete(waitList, sym)
+							waitMu.Unlock()
+							changed = true
+						} else if ema25M15 > ema50M15 {
+							log.Printf("❌ Wait失败 Sell : %s", sym)
+							waitMu.Lock()
+							delete(waitList, sym)
+							waitMu.Unlock()
+							changed = true
 						}
 					case "LongBuy":
-						if token.Symbol == "BTCUSDT" || token.Symbol == "ETHUSDT" {
-							condition3 := EMA25M1[len(EMA25M1)-1] > EMA50M1[len(EMA50M1)-1]
-							if priceGT && price1 > ema25M15 && ema25M5 > ema50M5 && condition3 {
-								//1小时GT，15分钟站上，5分钟金叉，1分钟金叉（BE）
-								msg := fmt.Sprintf("🟢%s \n价格：%.4f  时间：%s", sym, price1, now.Format("15:04"))
-								telegram.SendMessage(wait_sucess_token, chatID, msg)
-								log.Printf("🟢 等待成功 Buy : %s", sym)
-								waitMu.Lock()
-								delete(waitList, sym)
-								waitMu.Unlock()
-								changed = true
-							} else if ema25M15 < ema50M15 {
-								log.Printf("❌ Wait失败 Buy : %s", sym)
-								waitMu.Lock()
-								delete(waitList, sym)
-								waitMu.Unlock()
-								changed = true
-							}
-						} else {
-							condition3 := EMA25M1[len(EMA25M1)-1] > EMA50M1[len(EMA50M1)-1]
-							if priceGT && price1 > ema25M15 && price1 > ema25M5 && condition3 {
-								//1小时GT，15分钟站上，5分钟站上，1分钟金叉（动能币）
-								msg := fmt.Sprintf("🟢%s \n价格：%.4f  时间：%s", sym, price1, now.Format("15:04"))
-								telegram.SendMessage(wait_sucess_token, chatID, msg)
-								log.Printf("🟢 等待成功 Buy : %s", sym)
-								waitMu.Lock()
-								delete(waitList, sym)
-								waitMu.Unlock()
-								changed = true
-							} else if ema25H1 < ema50H1 {
-								log.Printf("❌ Wait失败 Buy : %s", sym)
-								waitMu.Lock()
-								delete(waitList, sym)
-								waitMu.Unlock()
-								changed = true
-							}
+						if priceGT && price1 > ema25M15 && price1 > ema25M5 && ema25M5 > ema50M5 && UpMACD {
+							//1小时GT，15分钟站上，5分钟站上, 5分钟金叉
+							msg := fmt.Sprintf("🟢%s \n价格：%.4f  时间：%s", sym, price1, now.Format("15:04"))
+							telegram.SendMessage(wait_sucess_token, chatID, msg)
+							log.Printf("🟢 等待成功 Buy : %s", sym)
+							waitMu.Lock()
+							delete(waitList, sym)
+							waitMu.Unlock()
+							changed = true
+						} else if ema25H1 < ema50H1 {
+							log.Printf("❌ Wait失败 Buy : %s", sym)
+							waitMu.Lock()
+							delete(waitList, sym)
+							waitMu.Unlock()
+							changed = true
 						}
 					case "LongSell":
-						if token.Symbol == "BTCUSDT" || token.Symbol == "ETHUSDT" {
-							condition3 := EMA25M1[len(EMA25M1)-1] < EMA50M1[len(EMA50M1)-1]
-							if !priceGT && ema25M5 < ema50M5 && price1 < ema25M15 && condition3 {
-								//1小时非GT，15分钟站下，5分钟死叉，1分钟死叉
-								msg := fmt.Sprintf("🔴%s \n价格：%.4f  时间：%s", sym, price1, now.Format("15:04"))
-								telegram.SendMessage(wait_sucess_token, chatID, msg)
-								log.Printf("🔴 等待成功 Sell : %s", sym)
-								waitMu.Lock()
-								delete(waitList, sym)
-								waitMu.Unlock()
-								changed = true
-							} else if ema25M15 > ema50M15 {
-								log.Printf("❌ Wait失败 Sell : %s", sym)
-								waitMu.Lock()
-								delete(waitList, sym)
-								waitMu.Unlock()
-								changed = true
-							}
-						} else {
-							condition3 := EMA25M1[len(EMA25M1)-1] < EMA50M1[len(EMA50M1)-1]
-							if !priceGT && price1 < ema25M15 && price1 < ema25M5 && condition3 {
-								//1小时非GT，15分钟站下，5分钟站下，1分钟死叉(动能)
-								msg := fmt.Sprintf("🔴%s \n价格：%.4f  时间：%s", sym, price1, now.Format("15:04"))
-								telegram.SendMessage(wait_sucess_token, chatID, msg)
-								log.Printf("🔴 等待成功 Sell : %s", sym)
-								waitMu.Lock()
-								delete(waitList, sym)
-								waitMu.Unlock()
-								changed = true
-							} else if ema25H1 > ema50H1 {
-								log.Printf("❌ Wait失败 Sell : %s", sym)
-								waitMu.Lock()
-								delete(waitList, sym)
-								waitMu.Unlock()
-								changed = true
-							}
+						if !priceGT && price1 < ema25M15 && price1 < ema25M5 && ema25M5 < ema50M5 && DownMACD {
+							//1小时非GT，15分钟站下，5分钟站下, 5分钟死叉
+							msg := fmt.Sprintf("🔴%s \n价格：%.4f  时间：%s", sym, price1, now.Format("15:04"))
+							telegram.SendMessage(wait_sucess_token, chatID, msg)
+							log.Printf("🔴 等待成功 Sell : %s", sym)
+							waitMu.Lock()
+							delete(waitList, sym)
+							waitMu.Unlock()
+							changed = true
+						} else if ema25H1 > ema50H1 {
+							log.Printf("❌ Wait失败 Sell : %s", sym)
+							waitMu.Lock()
+							delete(waitList, sym)
+							waitMu.Unlock()
+							changed = true
 						}
 					}
 
