@@ -9,7 +9,7 @@ import (
 	"github.com/adshao/go-binance/v2/futures"
 )
 
-func GetKlinesByAPI(client *futures.Client, symbol, tf string, klinesCount int) ([]*futures.Kline, []float64, error) {
+func GetKlinesByAPI(client *futures.Client, symbol, tf string, klinesCount int) ([]*futures.Kline, []float64, []float64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 7*time.Second)
 	defer cancel()
 
@@ -17,6 +17,7 @@ func GetKlinesByAPI(client *futures.Client, symbol, tf string, klinesCount int) 
 
 	var (
 		klines []*futures.Kline
+		opens  []float64
 		closes []float64
 		err    error
 	)
@@ -43,7 +44,13 @@ func GetKlinesByAPI(client *futures.Client, symbol, tf string, klinesCount int) 
 
 	// 若三次仍失败或数量不足，返回失败标记
 	if err != nil || len(klines) < 2 {
-		return nil, nil, err
+		return nil, nil, nil, err
+	}
+
+	opens = make([]float64, len(klines))
+	for i, k := range klines {
+		c, _ := strconv.ParseFloat(k.Open, 64)
+		opens[i] = c
 	}
 
 	closes = make([]float64, len(klines))
@@ -52,5 +59,5 @@ func GetKlinesByAPI(client *futures.Client, symbol, tf string, klinesCount int) 
 		closes[i] = c
 	}
 
-	return klines, closes, nil
+	return klines, opens, closes, nil
 }

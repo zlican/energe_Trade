@@ -107,17 +107,23 @@ func WaitEnerge(resultsChan chan []types.CoinIndicator, db *sql.DB, wait_sucess_
 				waitMu.Unlock()
 
 				for sym, token := range waitCopy {
-					_, closes, err := GetKlinesByAPI(client, sym, "15m", klinesCount)
+					_, opens, closes, err := GetKlinesByAPI(client, sym, "15m", klinesCount)
 					if err != nil {
 						log.Printf("❌ 获取K线失败: %s", sym)
 						continue
 					}
 
 					price1 := closes[len(closes)-1]
+					preOpen := opens[len(opens)-2]
+					preClose := closes[len(closes)-2]
 					priceGT := GetPriceGT_EMA25FromDB(db, sym)
 					ema25H1, ema50H1 := Get1HEMAFromDB(db, sym)
 					ema25M15, ema50M15, _ := Get15MEMAFromDB(db, sym)
 					ema25M5, ema50M5 := Get5MEMAFromDB(db, sym)
+
+					//有效穿透
+					IsUpEMA25M15 := preOpen > ema25M15 && preClose > ema25M15
+					IsDownEMA25M15 := preOpen < ema25M15 && preClose < ema25M15
 
 					//MACD
 					UpMACD := IsAboutToGoldenCross(closes, 6, 13, 5)
@@ -125,8 +131,8 @@ func WaitEnerge(resultsChan chan []types.CoinIndicator, db *sql.DB, wait_sucess_
 
 					switch token.Operation {
 					case "Buy":
-						if priceGT && price1 > ema25M15 && ema25M5 > ema50M5 && UpMACD {
-							//1小时GT，15分钟站上，5分钟金叉
+						if priceGT && ema25M15 > ema50M15 && price1 > ema25M15 && ema25M5 > ema50M5 && UpMACD {
+							//1小时GT，15分钟金叉，15分钟站上，5分钟金叉，MACD
 							msg := fmt.Sprintf("🟢%s \n价格：%.4f  时间：%s", sym, price1, now.Format("15:04"))
 							telegram.SendMessage(wait_sucess_token, chatID, msg)
 							log.Printf("🟢 等待成功 Buy : %s", sym)
@@ -142,8 +148,8 @@ func WaitEnerge(resultsChan chan []types.CoinIndicator, db *sql.DB, wait_sucess_
 							changed = true
 						}
 					case "Sell":
-						if !priceGT && price1 < ema25M15 && ema25M5 < ema50M5 && DownMACD {
-							//1小时非GT，15分钟站下，5分钟死叉
+						if !priceGT && ema25M15 < ema50M15 && price1 > ema25M15 && ema25M5 < ema50M5 && DownMACD {
+							//1小时非GT，15分钟死叉，15分钟站下，5分钟死叉
 							msg := fmt.Sprintf("🔴%s \n价格：%.4f  时间：%s", sym, price1, now.Format("15:04"))
 							telegram.SendMessage(wait_sucess_token, chatID, msg)
 							log.Printf("🔴 等待成功 Sell : %s", sym)
@@ -159,8 +165,8 @@ func WaitEnerge(resultsChan chan []types.CoinIndicator, db *sql.DB, wait_sucess_
 							changed = true
 						}
 					case "LongBuy":
-						if priceGT && price1 > ema25M15 && ema25M5 > ema50M5 && UpMACD {
-							//1小时GT，15分钟站上， 5分钟金叉
+						if priceGT && IsUpEMA25M15 && ema25M5 > ema50M5 && UpMACD {
+							//1小时GT，15分钟有效穿透，5分钟金叉，MACD
 							msg := fmt.Sprintf("🟢%s \n价格：%.4f  时间：%s", sym, price1, now.Format("15:04"))
 							telegram.SendMessage(wait_sucess_token, chatID, msg)
 							log.Printf("🟢 等待成功 Buy : %s", sym)
@@ -176,8 +182,8 @@ func WaitEnerge(resultsChan chan []types.CoinIndicator, db *sql.DB, wait_sucess_
 							changed = true
 						}
 					case "LongSell":
-						if !priceGT && price1 < ema25M15 && ema25M5 < ema50M5 && DownMACD {
-							//1小时非GT，15分钟站下，5分钟站下, 5分钟死叉
+						if !priceGT && IsDownEMA25M15 && ema25M5 < ema50M5 && DownMACD {
+							//1小时非GT，15分钟有效穿透，5分钟死叉,MACD
 							msg := fmt.Sprintf("🔴%s \n价格：%.4f  时间：%s", sym, price1, now.Format("15:04"))
 							telegram.SendMessage(wait_sucess_token, chatID, msg)
 							log.Printf("🔴 等待成功 Sell : %s", sym)
