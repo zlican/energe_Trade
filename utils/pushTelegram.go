@@ -15,28 +15,28 @@ func PushTelegram(results []types.CoinIndicator, botToken, high_profit_srsi_botT
 	now := time.Now().Format("2006-01-02 15:04")
 	var msgBuilder strings.Builder
 
-	// ---------- 添加主趋势播报 ----------
-	var btcLine, ethLine string
+	/* 	// ---------- 添加主趋势播报 ----------
+	   	var btcLine, ethLine string
 
-	switch betrend.BTC {
-	case "up":
-		btcLine = "🟢 BTC趋势：强势上涨"
-	case "down":
-		btcLine = "🔴 BTC趋势：强势下跌"
-	default:
-		btcLine = "⚪️ BTC趋势：随机漫步"
-	}
+	   	switch betrend.BTC {
+	   	case "up":
+	   		btcLine = "🟢 BTC趋势：强势上涨"
+	   	case "down":
+	   		btcLine = "🔴 BTC趋势：强势下跌"
+	   	default:
+	   		btcLine = "⚪️ BTC趋势：随机漫步"
+	   	}
 
-	switch betrend.ETH {
-	case "up":
-		ethLine = "🟢 ETH趋势：强势上涨"
-	case "down":
-		ethLine = "🔴 ETH趋势：强势下跌"
-	default:
-		ethLine = "⚪️ ETH趋势：随机漫步"
-	}
+	   	switch betrend.ETH {
+	   	case "up":
+	   		ethLine = "🟢 ETH趋势：强势上涨"
+	   	case "down":
+	   		ethLine = "🔴 ETH趋势：强势下跌"
+	   	default:
+	   		ethLine = "⚪️ ETH趋势：随机漫步"
+	   	} */
 
-	msgBuilder.WriteString(fmt.Sprintf("%s\n%s\n🎈Time：%s\n\n", btcLine, ethLine, now))
+	msgBuilder.WriteString(fmt.Sprintf("🎁Time：%s\n", now))
 
 	for _, r := range results {
 		operation := r.Operation

@@ -250,8 +250,15 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 	DownMACD := utils.IsAboutToDeadCross(closes, 6, 13, 5)
 
 	//有效穿透
-	IsUpEMA25M15 := preOpen > ema25M15 && preClose > ema25M15
-	IsDownEMA25M15 := preOpen < ema25M15 && preClose < ema25M15
+	isBTCOrETH := symbol == "BTCUSDT" || symbol == "ETHUSDT"
+	var IsUpEMA25M15, IsDownEMA25M15 bool
+	if isBTCOrETH {
+		IsUpEMA25M15 = preOpen > ema25M15 && preClose > ema25M15
+		IsDownEMA25M15 = preOpen < ema25M15 && preClose < ema25M15
+	} else {
+		IsUpEMA25M15 = preClose > ema25M15
+		IsDownEMA25M15 = preClose < ema25M15 //动能的preClose只要小于就叫Down
+	}
 
 	var status string
 	switch {

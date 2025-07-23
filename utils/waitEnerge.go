@@ -52,51 +52,24 @@ func sendWaitListBroadcast(now time.Time, waiting_token, chatID string) {
 	telegram.SendMessage(waiting_token, chatID, msg)
 }
 
+func waitUntilNext5Min() time.Duration {
+	now := time.Now()
+	next := now.Truncate(time.Minute).Add(time.Duration(5-now.Minute()%5) * time.Minute)
+	if next.Before(now) || next.Equal(now) {
+		next = next.Add(5 * time.Minute)
+	}
+	return time.Until(next)
+}
+
 func WaitEnerge(resultsChan chan []types.CoinIndicator, db *sql.DB, wait_sucess_token, chatID string, client *futures.Client, klinesCount int, waiting_token string) {
-	ticker := time.NewTicker(5 * time.Minute)
-	defer ticker.Stop()
+	go func() {
+		// 首次对齐等待，直到下一个 5 分钟整点
+		time.Sleep(waitUntilNext5Min())
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
 
-	for {
-		select {
-		case newResults := <-resultsChan:
-			var newAdded bool
-			now := time.Now()
-
-			waitMu.Lock()
-			for _, coin := range newResults {
-				if coin.Status == "Wait" {
-					existing, exists := waitList[coin.Symbol]
-					if !exists {
-						// 不存在，直接添加
-						waitList[coin.Symbol] = waitToken{
-							Symbol:    coin.Symbol,
-							Operation: coin.Operation,
-							AddedAt:   now,
-						}
-						log.Printf("✅ 添加等待代币: %s", coin.Symbol)
-						newAdded = true
-					} else if existing.Operation != coin.Operation {
-						// 存在但操作不同，用新的替代
-						waitList[coin.Symbol] = waitToken{
-							Symbol:    coin.Symbol,
-							Operation: coin.Operation,
-							AddedAt:   now,
-						}
-						log.Printf("🔁 替换操作不同的等待代币: %s (%s → %s)", coin.Symbol, existing.Operation, coin.Operation)
-						newAdded = true
-					} // 否则操作相同，不做处理
-				}
-			}
-			waitMu.Unlock()
-
-			// 若有新代币加入等待区，则立即推送一次等待列表
-			if newAdded {
-				sendWaitListBroadcast(now, waiting_token, chatID)
-			}
-
-		case <-ticker.C:
-			go func() {
-				now := time.Now()
+		for now := range ticker.C {
+			go func(now time.Time) {
 				var changed bool // 是否发生了删除
 
 				waitMu.Lock()
@@ -122,17 +95,22 @@ func WaitEnerge(resultsChan chan []types.CoinIndicator, db *sql.DB, wait_sucess_
 					ema25M5, ema50M5 := Get5MEMAFromDB(db, sym)
 
 					//有效穿透
-					IsUpEMA25M15 := preOpen > ema25M15 && preClose > ema25M15
-					IsDownEMA25M15 := preOpen < ema25M15 && preClose < ema25M15
+					isBTCOrETH := sym == "BTCUSDT" || sym == "ETHUSDT"
+					var IsUpEMA25M15, IsDownEMA25M15 bool
+					if isBTCOrETH {
+						IsUpEMA25M15 = preOpen > ema25M15 && preClose > ema25M15
+						IsDownEMA25M15 = preOpen < ema25M15 && preClose < ema25M15
+					} else {
+						IsUpEMA25M15 = preClose > ema25M15
+						IsDownEMA25M15 = preClose < ema25M15
+					}
 
-					//MACD
 					UpMACD := IsAboutToGoldenCross(closes, 6, 13, 5)
 					DownMACD := IsAboutToDeadCross(closes, 6, 13, 5)
 
 					switch token.Operation {
 					case "Buy":
-						if priceGT && ema25M15 > ema50M15 && price1 > ema25M15 && ema25M5 > ema50M5 && UpMACD {
-							//1小时GT，15分钟金叉，15分钟站上，5分钟金叉，MACD
+						if priceGT && ema25M15 > ema50M15 && !IsDownEMA25M15 && ema25M5 > ema50M5 && UpMACD {
 							msg := fmt.Sprintf("🟢%s \n价格：%.4f  时间：%s", sym, price1, now.Format("15:04"))
 							telegram.SendMessage(wait_sucess_token, chatID, msg)
 							log.Printf("🟢 等待成功 Buy : %s", sym)
@@ -148,8 +126,7 @@ func WaitEnerge(resultsChan chan []types.CoinIndicator, db *sql.DB, wait_sucess_
 							changed = true
 						}
 					case "Sell":
-						if !priceGT && ema25M15 < ema50M15 && price1 > ema25M15 && ema25M5 < ema50M5 && DownMACD {
-							//1小时非GT，15分钟死叉，15分钟站下，5分钟死叉
+						if !priceGT && ema25M15 < ema50M15 && !IsUpEMA25M15 && ema25M5 < ema50M5 && DownMACD {
 							msg := fmt.Sprintf("🔴%s \n价格：%.4f  时间：%s", sym, price1, now.Format("15:04"))
 							telegram.SendMessage(wait_sucess_token, chatID, msg)
 							log.Printf("🔴 等待成功 Sell : %s", sym)
@@ -166,7 +143,6 @@ func WaitEnerge(resultsChan chan []types.CoinIndicator, db *sql.DB, wait_sucess_
 						}
 					case "LongBuy":
 						if priceGT && IsUpEMA25M15 && ema25M5 > ema50M5 && UpMACD {
-							//1小时GT，15分钟有效穿透，5分钟金叉，MACD
 							msg := fmt.Sprintf("🟢%s \n价格：%.4f  时间：%s", sym, price1, now.Format("15:04"))
 							telegram.SendMessage(wait_sucess_token, chatID, msg)
 							log.Printf("🟢 等待成功 Buy : %s", sym)
@@ -183,7 +159,6 @@ func WaitEnerge(resultsChan chan []types.CoinIndicator, db *sql.DB, wait_sucess_
 						}
 					case "LongSell":
 						if !priceGT && IsDownEMA25M15 && ema25M5 < ema50M5 && DownMACD {
-							//1小时非GT，15分钟有效穿透，5分钟死叉,MACD
 							msg := fmt.Sprintf("🔴%s \n价格：%.4f  时间：%s", sym, price1, now.Format("15:04"))
 							telegram.SendMessage(wait_sucess_token, chatID, msg)
 							log.Printf("🔴 等待成功 Sell : %s", sym)
@@ -200,7 +175,6 @@ func WaitEnerge(resultsChan chan []types.CoinIndicator, db *sql.DB, wait_sucess_
 						}
 					}
 
-					// 超时（8小时）
 					if now.Sub(token.AddedAt) > 8*time.Hour {
 						log.Printf("⏰ Wait超时清理 : %s", sym)
 						waitMu.Lock()
@@ -210,11 +184,37 @@ func WaitEnerge(resultsChan chan []types.CoinIndicator, db *sql.DB, wait_sucess_
 					}
 				}
 
-				// 有代币被移除时，再次推送等待列表
 				if changed {
 					sendWaitListBroadcast(now, waiting_token, chatID)
 				}
-			}()
+			}(now)
+		}
+	}()
+
+	// 接收新 results 并更新 waitList（逻辑不变）
+	for newResults := range resultsChan {
+		var newAdded bool
+		now := time.Now()
+
+		waitMu.Lock()
+		for _, coin := range newResults {
+			if coin.Status == "Wait" {
+				existing, exists := waitList[coin.Symbol]
+				if !exists || existing.Operation != coin.Operation {
+					waitList[coin.Symbol] = waitToken{
+						Symbol:    coin.Symbol,
+						Operation: coin.Operation,
+						AddedAt:   now,
+					}
+					log.Printf("✅ 添加或替换等待代币: %s", coin.Symbol)
+					newAdded = true
+				}
+			}
+		}
+		waitMu.Unlock()
+
+		if newAdded {
+			sendWaitListBroadcast(now, waiting_token, chatID)
 		}
 	}
 }

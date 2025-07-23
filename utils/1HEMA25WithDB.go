@@ -15,6 +15,7 @@ import (
 
 func Update1hEMA25ToDB(client *futures.Client, db *sql.DB, limitVolume float64, klinesCount int, volumeCache *types.VolumeCache, slipCoin []string) {
 	ctx := context.Background()
+	time.Sleep(2 * time.Second)
 
 	// 从 VolumeCache 拿热门币种
 	symbols := volumeCache.SymbolsAbove(limitVolume)
