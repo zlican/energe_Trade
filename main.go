@@ -235,8 +235,8 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 	var srsi15M, srsi1H float64
 	srsi15M = utils.Get15SRSIFromDB(db, symbol)
 
-	buyCond := srsi15M < 25
-	sellCond := srsi15M > 75
+	buyCond := srsi15M < 35
+	sellCond := srsi15M > 65
 
 	//左侧高性价比模型
 	longUp := ema25M1H > ema50M1H && price > ema169M15
