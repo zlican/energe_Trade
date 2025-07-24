@@ -95,9 +95,9 @@ func WaitEnerge(resultsChan chan []types.CoinIndicator, db *sql.DB, wait_sucess_
 					ema25M5, ema50M5 := Get5MEMAFromDB(db, sym)
 
 					//有效穿透
-					isBTCOrETH := sym == "BTCUSDT" || sym == "ETHUSDT"
+					isBTCOrETHOrSOL := sym == "BTCUSDT" || sym == "ETHUSDT" || sym == "SOLUSDT"
 					var IsUpEMA25M15, IsDownEMA25M15 bool
-					if isBTCOrETH {
+					if isBTCOrETHOrSOL {
 						IsUpEMA25M15 = preOpen > ema25M15 && preClose > ema25M15
 						IsDownEMA25M15 = preOpen < ema25M15 && preClose < ema25M15
 					} else {

@@ -50,13 +50,13 @@ func PushTelegram(results []types.CoinIndicator, botToken, high_profit_srsi_botT
 
 		var line string
 		if operation == "Buy" {
-			if r.Symbol == "BTCUSDT" || r.Symbol == "ETHUSDT" {
+			if r.Symbol == "BTCUSDT" || r.Symbol == "ETHUSDT" || r.Symbol == "SOLUSDT" {
 				line = fmt.Sprintf("💎🟢%-4s %-10s (%4s)", r.Operation, r.Symbol, r.Status)
 			} else {
 				line = fmt.Sprintf("🟢%-4s %-10s (%4s)", r.Operation, r.Symbol, r.Status)
 			}
 		} else if operation == "Sell" {
-			if r.Symbol == "BTCUSDT" || r.Symbol == "ETHUSDT" {
+			if r.Symbol == "BTCUSDT" || r.Symbol == "ETHUSDT" || r.Symbol == "SOLUSDT" {
 				line = fmt.Sprintf("💎🔴%-4s %-10s (%4s)", r.Operation, r.Symbol, r.Status)
 			} else {
 				line = fmt.Sprintf("🔴%-4s %-10s (%4s)", r.Operation, r.Symbol, r.Status)

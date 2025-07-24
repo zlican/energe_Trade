@@ -250,9 +250,9 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 	DownMACD := utils.IsAboutToDeadCross(closes, 6, 13, 5)
 
 	//有效穿透
-	isBTCOrETH := symbol == "BTCUSDT" || symbol == "ETHUSDT"
+	isBTCOrETHOrSOL := symbol == "BTCUSDT" || symbol == "ETHUSDT" || symbol == "SOLUSDT"
 	var IsUpEMA25M15, IsDownEMA25M15 bool
-	if isBTCOrETH {
+	if isBTCOrETHOrSOL {
 		IsUpEMA25M15 = preOpen > ema25M15 && preClose > ema25M15
 		IsDownEMA25M15 = preOpen < ema25M15 && preClose < ema25M15
 	} else {
@@ -278,6 +278,10 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 			Status:       status,
 			Operation:    "Buy"}, true
 	case down && sellCond:
+		if !isBTCOrETHOrSOL {
+			// 只做空 BTC、ETH、SOL，其他跳过
+			return types.CoinIndicator{}, false
+		}
 		progressLogger.Printf("SELL 触发: %s %.2f", symbol, price) // 👈
 		if ema25M5 < ema50M5 && !IsUpEMA25M15 && DownMACD {
 			//5分钟死叉，价格未有效穿透EMA25M15
@@ -308,6 +312,10 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 			Status:       status,
 			Operation:    "LongBuy"}, true
 	case longSell && longSellCond:
+		if !isBTCOrETHOrSOL {
+			// 只做空 BTC、ETH、SOL，其他跳过
+			return types.CoinIndicator{}, false
+		}
 		progressLogger.Printf("LongSell 触发: %s %.2f", symbol, price) // 👈
 		if !priceGT_EMA25 && ema25M5 < ema50M5 && IsDownEMA25M15 && DownMACD {
 			//!GT,5分钟死叉，价格有效穿透EMA25M15
