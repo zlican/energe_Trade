@@ -36,7 +36,11 @@ func PushTelegram(results []types.CoinIndicator, botToken, high_profit_srsi_botT
 	   		ethLine = "⚪️ ETH趋势：随机漫步"
 	   	} */
 
-	msgBuilder.WriteString(fmt.Sprintf("🎁Time：%s\n", now))
+	if len(results) == 0 {
+		msgBuilder.WriteString(fmt.Sprintf("（无）Time：%s\n", now))
+	} else {
+		msgBuilder.WriteString(fmt.Sprintf("🎁Time：%s\n", now))
+	}
 
 	for _, r := range results {
 		operation := r.Operation
