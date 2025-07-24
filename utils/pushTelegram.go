@@ -15,45 +15,29 @@ func PushTelegram(results []types.CoinIndicator, botToken, high_profit_srsi_botT
 	now := time.Now().Format("2006-01-02 15:04")
 	var msgBuilder strings.Builder
 
-	/* 	// ---------- 添加主趋势播报 ----------
-	   	var btcLine, ethLine string
+	var filteredResults []types.CoinIndicator
+	for _, r := range results {
+		if r.Status != "Wait" {
+			filteredResults = append(filteredResults, r)
+		}
+	}
 
-	   	switch betrend.BTC {
-	   	case "up":
-	   		btcLine = "🟢 BTC趋势：强势上涨"
-	   	case "down":
-	   		btcLine = "🔴 BTC趋势：强势下跌"
-	   	default:
-	   		btcLine = "⚪️ BTC趋势：随机漫步"
-	   	}
-
-	   	switch betrend.ETH {
-	   	case "up":
-	   		ethLine = "🟢 ETH趋势：强势上涨"
-	   	case "down":
-	   		ethLine = "🔴 ETH趋势：强势下跌"
-	   	default:
-	   		ethLine = "⚪️ ETH趋势：随机漫步"
-	   	} */
-
-	if len(results) == 0 {
+	// 判断是否为空
+	if len(filteredResults) == 0 {
 		msgBuilder.WriteString(fmt.Sprintf("（无）Time：%s\n", now))
 	} else {
 		msgBuilder.WriteString(fmt.Sprintf("🎁Time：%s\n", now))
 	}
 
-	for _, r := range results {
+	for _, r := range filteredResults {
 		operation := r.Operation
-		if r.Status == "Wait" {
-			continue
-		}
 		volume, ok := volumeCache.Get(r.Symbol)
 		if !ok || volume < 300000000 {
 			continue
 		}
 
 		var line string
-		if operation == "Buy" {
+		if operation == "Buy" || operation == "BuyBTC" {
 			if r.Symbol == "BTCUSDT" || r.Symbol == "ETHUSDT" {
 				line = fmt.Sprintf("💎🟢%-4s %-10s (%4s)", r.Operation, r.Symbol, r.Status)
 			} else {
@@ -70,7 +54,7 @@ func PushTelegram(results []types.CoinIndicator, botToken, high_profit_srsi_botT
 		} else if operation == "LongSell" {
 			line = fmt.Sprintf("🔴%-4s %-10s (%4s)", r.Operation, r.Symbol, r.Status)
 		} else {
-			continue // 忽略非 Buy/Sell 操作
+			continue
 		}
 
 		msgBuilder.WriteString(line + "\n")
