@@ -38,7 +38,7 @@ func sendWaitListBroadcast(now time.Time, waiting_token, chatID string) {
 	var emoje string
 
 	for _, token := range waitList {
-		if token.Operation == "Buy" || token.Operation == "LongBuy" || token.Operation == "BuyBTC" {
+		if token.Operation == "Buy" || token.Operation == "LongBuy" || token.Operation == "BuyBE" {
 			emoje = "🟢"
 		} else if token.Operation == "Sell" || token.Operation == "LongSell" {
 			emoje = "🔴"
@@ -112,9 +112,17 @@ func WaitEnerge(resultsChan chan []types.CoinIndicator, db *sql.DB, wait_sucess_
 					UpMACD := IsAboutToGoldenCross(closes, 6, 13, 5)
 					DownMACD := IsAboutToDeadCross(closes, 6, 13, 5)
 
+					//M1单独判断
+					_, opensM1, closesM1, err := GetKlinesByAPI(client, sym, "1m", klinesCount)
+					if err != nil || len(opens) < 2 || len(closes) < 2 {
+						continue
+					}
+					M1UP := IsM1Up(opensM1, closesM1)
+					M1DOWN := IsM1Down(opensM1, closesM1)
+
 					switch token.Operation {
 					case "Buy":
-						if priceGT && ema25M15 > ema50M15 && !IsDownEMA25M15 && ema25M5 > ema50M5 && UpMACD {
+						if priceGT && ema25M15 > ema50M15 && !IsDownEMA25M15 && ema25M5 > ema50M5 && UpMACD && M1UP {
 							msg := fmt.Sprintf("🟢%s \n价格：%.4f  时间：%s", sym, price1, now.Format("15:04"))
 							telegram.SendMessage(wait_sucess_token, chatID, msg)
 							log.Printf("🟢 等待成功 Buy : %s", sym)
@@ -130,7 +138,7 @@ func WaitEnerge(resultsChan chan []types.CoinIndicator, db *sql.DB, wait_sucess_
 							changed = true
 						}
 					case "Sell":
-						if !priceGT && ema25M15 < ema50M15 && !IsUpEMA25M15 && ema25M5 < ema50M5 && DownMACD {
+						if !priceGT && ema25M15 < ema50M15 && !IsUpEMA25M15 && ema25M5 < ema50M5 && DownMACD && M1DOWN {
 							msg := fmt.Sprintf("🔴%s \n价格：%.4f  时间：%s", sym, price1, now.Format("15:04"))
 							telegram.SendMessage(wait_sucess_token, chatID, msg)
 							log.Printf("🔴 等待成功 Sell : %s", sym)
@@ -146,7 +154,7 @@ func WaitEnerge(resultsChan chan []types.CoinIndicator, db *sql.DB, wait_sucess_
 							changed = true
 						}
 					case "LongBuy":
-						if priceGT && IsUpEMA25M15 && ema25M5 > ema50M5 && UpMACD {
+						if priceGT && IsUpEMA25M15 && ema25M5 > ema50M5 && UpMACD && M1UP {
 							msg := fmt.Sprintf("🟢%s \n价格：%.4f  时间：%s", sym, price1, now.Format("15:04"))
 							telegram.SendMessage(wait_sucess_token, chatID, msg)
 							log.Printf("🟢 等待成功 Buy : %s", sym)
@@ -162,7 +170,7 @@ func WaitEnerge(resultsChan chan []types.CoinIndicator, db *sql.DB, wait_sucess_
 							changed = true
 						}
 					case "LongSell":
-						if !priceGT && IsDownEMA25M15 && ema25M5 < ema50M5 && DownMACD {
+						if !priceGT && IsDownEMA25M15 && ema25M5 < ema50M5 && DownMACD && M1DOWN {
 							msg := fmt.Sprintf("🔴%s \n价格：%.4f  时间：%s", sym, price1, now.Format("15:04"))
 							telegram.SendMessage(wait_sucess_token, chatID, msg)
 							log.Printf("🔴 等待成功 Sell : %s", sym)
@@ -177,8 +185,8 @@ func WaitEnerge(resultsChan chan []types.CoinIndicator, db *sql.DB, wait_sucess_
 							waitMu.Unlock()
 							changed = true
 						}
-					case "BuyBTC":
-						if UpMACD {
+					case "BuyBE":
+						if UpMACD && M1UP {
 							msg := fmt.Sprintf("🟢%s \n价格：%.4f  时间：%s", sym, price1, now.Format("15:04"))
 							telegram.SendMessage(wait_sucess_token, chatID, msg)
 							log.Printf("🟢 等待成功 Buy : %s", sym)

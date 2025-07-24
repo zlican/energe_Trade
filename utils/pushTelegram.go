@@ -37,7 +37,7 @@ func PushTelegram(results []types.CoinIndicator, botToken, high_profit_srsi_botT
 		}
 
 		var line string
-		if operation == "Buy" || operation == "BuyBTC" {
+		if operation == "Buy" || operation == "BuyBE" {
 			if r.Symbol == "BTCUSDT" || r.Symbol == "ETHUSDT" {
 				line = fmt.Sprintf("💎🟢%-4s %-10s (%4s)", r.Operation, r.Symbol, r.Status)
 			} else {

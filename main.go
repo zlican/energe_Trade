@@ -261,19 +261,25 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 		IsDownEMA25M15 = preClose < ema25M15 //动能的preClose只要小于就叫Down
 	}
 
-	//BTC专属
-	var isBTC, BTCBelowEMA25 bool
-	if symbol == "BTCUSDT" {
-		isBTC = true
-		BTCBelowEMA25 = price < ema25M15
+	//BE专属
+	var isBE, BEBelowEMA25 bool
+	if symbol == "BTCUSDT" || symbol == "ETHUSDT" {
+		isBE = true
+		BEBelowEMA25 = price < ema25M15
 	}
-	buyCondBTC := srsi15M < 15
+	buyCondBE := srsi15M < 15
 
 	var status string
 	switch {
 	case up && buyCond:
 		progressLogger.Printf("BUY 触发: %s %.2f", symbol, price) // 👈
-		if ema25M5 > ema50M5 && !IsDownEMA25M15 && UpMACD {
+		//这里对通过一层的代币增加 死叉传递理论（1分钟）
+		_, opensM1, closesM1, err := utils.GetKlinesByAPI(client, symbol, tf, klinesCount)
+		if err != nil || len(opens) < 2 || len(closes) < 2 {
+			return types.CoinIndicator{}, false
+		}
+		M1UP := utils.IsM1Up(opensM1, closesM1)
+		if ema25M5 > ema50M5 && !IsDownEMA25M15 && UpMACD && M1UP {
 			//5分钟金叉，价格未有效穿透EMA25M15
 			status = "Soon"
 		} else {
@@ -292,7 +298,13 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 			return types.CoinIndicator{}, false
 		}
 		progressLogger.Printf("SELL 触发: %s %.2f", symbol, price) // 👈
-		if ema25M5 < ema50M5 && !IsUpEMA25M15 && DownMACD {
+
+		_, opensM1, closesM1, err := utils.GetKlinesByAPI(client, symbol, tf, klinesCount)
+		if err != nil || len(opens) < 2 || len(closes) < 2 {
+			return types.CoinIndicator{}, false
+		}
+		M1DOWN := utils.IsM1Down(opensM1, closesM1)
+		if ema25M5 < ema50M5 && !IsUpEMA25M15 && DownMACD && M1DOWN {
 			//5分钟死叉，价格未有效穿透EMA25M15
 			status = "Soon"
 		} else {
@@ -306,8 +318,13 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 			Status:       status,
 			Operation:    "Sell"}, true
 	case longUp && longBuyCond:
+		_, opensM1, closesM1, err := utils.GetKlinesByAPI(client, symbol, tf, klinesCount)
+		if err != nil || len(opens) < 2 || len(closes) < 2 {
+			return types.CoinIndicator{}, false
+		}
+		M1UP := utils.IsM1Up(opensM1, closesM1)
 		progressLogger.Printf("LongBUY 触发: %s %.2f", symbol, price) // 👈
-		if priceGT_EMA25 && ema25M5 > ema50M5 && IsUpEMA25M15 && UpMACD {
+		if priceGT_EMA25 && ema25M5 > ema50M5 && IsUpEMA25M15 && UpMACD && M1UP {
 			//GT,5分钟金叉, 价格有效穿透EMA25M15
 			status = "LongSoon"
 		} else {
@@ -326,7 +343,12 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 			return types.CoinIndicator{}, false
 		}
 		progressLogger.Printf("LongSell 触发: %s %.2f", symbol, price) // 👈
-		if !priceGT_EMA25 && ema25M5 < ema50M5 && IsDownEMA25M15 && DownMACD {
+		_, opensM1, closesM1, err := utils.GetKlinesByAPI(client, symbol, tf, klinesCount)
+		if err != nil || len(opens) < 2 || len(closes) < 2 {
+			return types.CoinIndicator{}, false
+		}
+		M1DOWN := utils.IsM1Down(opensM1, closesM1)
+		if !priceGT_EMA25 && ema25M5 < ema50M5 && IsDownEMA25M15 && DownMACD && M1DOWN {
 			//!GT,5分钟死叉，价格有效穿透EMA25M15
 			status = "LongSoon"
 		} else {
@@ -339,9 +361,15 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 			StochRSI:     srsi15M,
 			Status:       status,
 			Operation:    "LongSell"}, true
-	case isBTC && BTCBelowEMA25 && buyCondBTC:
+	case isBE && BEBelowEMA25 && buyCondBE:
 		progressLogger.Printf("BUY 触发: %s %.2f", symbol, price) // 👈
-		if UpMACD {
+		_, opensM1, closesM1, err := utils.GetKlinesByAPI(client, symbol, tf, klinesCount)
+		if err != nil || len(opens) < 2 || len(closes) < 2 {
+			return types.CoinIndicator{}, false
+		}
+		M1UP := utils.IsM1Up(opensM1, closesM1)
+
+		if UpMACD && M1UP {
 			status = "Soon"
 		} else {
 			status = "Wait"
@@ -352,7 +380,7 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 			TimeInternal: tf,
 			StochRSI:     srsi15M,
 			Status:       status,
-			Operation:    "BuyBTC"}, true
+			Operation:    "BuyBE"}, true
 	default:
 		return types.CoinIndicator{}, false
 	}
