@@ -29,7 +29,7 @@ var (
 	proxyURL                  = "http://127.0.0.1:10809"
 	klinesCount               = 200
 	maxWorkers                = 20
-	limitVolume               = 200000000                                        //2亿 USDT
+	limitVolume               = 300000000                                        //3亿 USDT
 	botToken                  = "8040107823:AAHC_qu5cguJf9BG4NDiUB_nwpgF-bPkJAg" //二级印钞
 	wait_energe_botToken      = "7381664741:AAEmhhEhsq8nBgThtsOfVklNb6q4TjvI_Og" //播报成功
 	energe_waiting_botToken   = "7417712542:AAGjCOMeFFFuNCo5vNBWDYJqGs0Qm2ifwmY" //等待区bot
