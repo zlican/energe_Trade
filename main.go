@@ -48,7 +48,7 @@ var (
 		"SPXUSDT", "TONUSDT", "ETCUSDT", "PUMPUSDT", "ENAUSDT", "LDOUSDT", "NEIROUSDT", "AAVEUSDT",
 		"UNIUSDT", "APTUSDT", "TRUMPUSDT", "DOGEUSDC", "VIRTUALUSDT", "SEIUSDT", "WIFUSDT",
 		"ONDOUSDT", "MOODENGUSDT", "PENGUUSDT", "NEIROETHUSDT", "CROSSUSDT", "SUIUSDT", "OPUSDT",
-		"FXSUSDT", "DOGEUSDT"} // 想排除的币放这里
+		"FXSUSDT", "DOGEUSDT", "SOLUSDT"} // 想排除的币放这里
 	muVolumeMap    sync.Mutex
 	progressLogger = log.New(os.Stdout, "[Screener] ", log.LstdFlags)
 	db             *sql.DB
@@ -250,7 +250,8 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 	DownMACD := utils.IsAboutToDeadCross(closes, 6, 13, 5)
 
 	//有效穿透
-	isBTCOrETHOrSOL := symbol == "BTCUSDT" || symbol == "ETHUSDT" || symbol == "SOLUSDT"
+	isBTCOrETHOrSOL := symbol == "BTCUSDT" || symbol == "ETHUSDT"
+
 	var IsUpEMA25M15, IsDownEMA25M15 bool
 	if isBTCOrETHOrSOL {
 		IsUpEMA25M15 = preOpen > ema25M15 && preClose > ema25M15
@@ -258,6 +259,13 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 	} else {
 		IsUpEMA25M15 = preClose > ema25M15
 		IsDownEMA25M15 = preClose < ema25M15 //动能的preClose只要小于就叫Down
+	}
+
+	//BTC专属
+	var isBTC, BTCBelowEMA25 bool
+	if symbol == "BTCUSDT" {
+		isBTC = true
+		BTCBelowEMA25 = price < ema25M15
 	}
 
 	var status string
@@ -330,6 +338,20 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 			StochRSI:     srsi15M,
 			Status:       status,
 			Operation:    "LongSell"}, true
+	case isBTC && BTCBelowEMA25 && buyCond:
+		progressLogger.Printf("BUY 触发: %s %.2f", symbol, price) // 👈
+		if UpMACD {
+			status = "Soon"
+		} else {
+			status = "Wait"
+		}
+		return types.CoinIndicator{
+			Symbol:       symbol,
+			Price:        price,
+			TimeInternal: tf,
+			StochRSI:     srsi15M,
+			Status:       status,
+			Operation:    "BuyBTC"}, true
 	default:
 		return types.CoinIndicator{}, false
 	}

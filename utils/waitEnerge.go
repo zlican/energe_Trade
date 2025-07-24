@@ -95,7 +95,7 @@ func WaitEnerge(resultsChan chan []types.CoinIndicator, db *sql.DB, wait_sucess_
 					ema25M5, ema50M5 := Get5MEMAFromDB(db, sym)
 
 					//有效穿透
-					isBTCOrETHOrSOL := sym == "BTCUSDT" || sym == "ETHUSDT" || sym == "SOLUSDT"
+					isBTCOrETHOrSOL := sym == "BTCUSDT" || sym == "ETHUSDT"
 					var IsUpEMA25M15, IsDownEMA25M15 bool
 					if isBTCOrETHOrSOL {
 						IsUpEMA25M15 = preOpen > ema25M15 && preClose > ema25M15
@@ -168,6 +168,22 @@ func WaitEnerge(resultsChan chan []types.CoinIndicator, db *sql.DB, wait_sucess_
 							changed = true
 						} else if ema25H1 > ema50H1 {
 							log.Printf("❌ Wait失败 Sell : %s", sym)
+							waitMu.Lock()
+							delete(waitList, sym)
+							waitMu.Unlock()
+							changed = true
+						}
+					case "BuyBTC":
+						if UpMACD {
+							msg := fmt.Sprintf("🟢%s \n价格：%.4f  时间：%s", sym, price1, now.Format("15:04"))
+							telegram.SendMessage(wait_sucess_token, chatID, msg)
+							log.Printf("🟢 等待成功 Buy : %s", sym)
+							waitMu.Lock()
+							delete(waitList, sym)
+							waitMu.Unlock()
+							changed = true
+						} else if ema25M15 < ema50M15 {
+							log.Printf("❌ Wait失败 Buy : %s", sym)
 							waitMu.Lock()
 							delete(waitList, sym)
 							waitMu.Unlock()
