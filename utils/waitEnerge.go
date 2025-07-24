@@ -38,7 +38,7 @@ func sendWaitListBroadcast(now time.Time, waiting_token, chatID string) {
 	var emoje string
 
 	for _, token := range waitList {
-		if token.Operation == "Buy" || token.Operation == "LongBuy" {
+		if token.Operation == "Buy" || token.Operation == "LongBuy" || token.Operation == "BuyBTC" {
 			emoje = "🟢"
 		} else if token.Operation == "Sell" || token.Operation == "LongSell" {
 			emoje = "🔴"

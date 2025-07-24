@@ -267,6 +267,7 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 		isBTC = true
 		BTCBelowEMA25 = price < ema25M15
 	}
+	buyCondBTC := srsi15M < 15
 
 	var status string
 	switch {
@@ -338,7 +339,7 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 			StochRSI:     srsi15M,
 			Status:       status,
 			Operation:    "LongSell"}, true
-	case isBTC && BTCBelowEMA25 && buyCond:
+	case isBTC && BTCBelowEMA25 && buyCondBTC:
 		progressLogger.Printf("BUY 触发: %s %.2f", symbol, price) // 👈
 		if UpMACD {
 			status = "Soon"
