@@ -17,7 +17,7 @@ func PushTelegram(results []types.CoinIndicator, botToken, high_profit_srsi_botT
 
 	var filteredResults []types.CoinIndicator
 	for _, r := range results {
-		if r.Status != "Wait" {
+		if r.Status != "Wait" && r.Status != "LongWait" {
 			filteredResults = append(filteredResults, r)
 		}
 	}

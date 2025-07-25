@@ -255,6 +255,10 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 		isBE = true
 		BEBelowEMA25 = price < ema25M1H //1小时之下
 	}
+	//1.抄底
+	BEUP := isBE && BEBelowEMA25 && ema25M5 > ema50M5 //后面加上1分钟区分view和wait
+	//2.猛烈下跌
+	BEDOWN := isBE && BEBelowEMA25 && ema25M15 < ema50M15 && ema25M5 < ema50M5 //后面加上1分钟死叉为view
 
 	var status string
 	switch {
@@ -317,7 +321,7 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 			//GT,5分钟金叉, 1分钟金叉，MACD
 			status = "LongView"
 		} else {
-			status = "Wait"
+			status = "LongWait"
 		}
 		return types.CoinIndicator{
 			Symbol:       symbol,
@@ -342,7 +346,7 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 			//!GT,5分钟死叉，1分钟死叉，MACD
 			status = "LongView"
 		} else {
-			status = "Wait"
+			status = "LongWait"
 		}
 		return types.CoinIndicator{
 			Symbol:       symbol,
@@ -351,7 +355,7 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 			StochRSI:     srsi15M,
 			Status:       status,
 			Operation:    "LongSell"}, true
-	case isBE && BEBelowEMA25:
+	case BEUP:
 		progressLogger.Printf("BUY 触发: %s %.2f", symbol, price) // 👈
 		_, _, closesM1, err := utils.GetKlinesByAPI(client, symbol, "1m", klinesCount)
 		if err != nil || len(opens) < 2 || len(closes) < 2 {
@@ -360,7 +364,7 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 		EMA25M1 := utils.CalculateEMA(closesM1, 25)
 		EMA50M1 := utils.CalculateEMA(closesM1, 50)
 
-		if ema25M5 > ema50M5 && UpMACD && EMA25M1[len(EMA25M1)-1] > EMA50M1[len(EMA50M1)-1] {
+		if UpMACD && EMA25M1[len(EMA25M1)-1] > EMA50M1[len(EMA50M1)-1] {
 			status = "View"
 		} else {
 			status = "Wait"
@@ -372,6 +376,27 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 			StochRSI:     srsi15M,
 			Status:       status,
 			Operation:    "BuyBE"}, true
+	case BEDOWN:
+		progressLogger.Printf("View 触发: %s %.2f", symbol, price) // 👈
+		_, _, closesM1, err := utils.GetKlinesByAPI(client, symbol, "1m", klinesCount)
+		if err != nil || len(opens) < 2 || len(closes) < 2 {
+			return types.CoinIndicator{}, false
+		}
+		EMA25M1 := utils.CalculateEMA(closesM1, 25)
+		EMA50M1 := utils.CalculateEMA(closesM1, 50)
+
+		if DownMACD && EMA25M1[len(EMA25M1)-1] < EMA50M1[len(EMA50M1)-1] {
+			status = "ViewBE"
+		} else {
+			return types.CoinIndicator{}, false
+		}
+		return types.CoinIndicator{
+			Symbol:       symbol,
+			Price:        price,
+			TimeInternal: tf,
+			StochRSI:     srsi15M,
+			Status:       status,
+			Operation:    "ViewBE"}, true
 	default:
 		return types.CoinIndicator{}, false
 	}
