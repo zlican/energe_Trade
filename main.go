@@ -270,7 +270,7 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 		EMA50M1 := utils.CalculateEMA(closesM1, 50)
 		if ema25M5 > ema50M5 && EMA25M1[len(EMA25M1)-1] > EMA50M1[len(EMA50M1)-1] && UpMACD {
 			//5分钟金叉，1分钟金叉，MACD趋向
-			status = "Soon"
+			status = "View"
 		} else {
 			status = "Wait"
 		}
@@ -295,7 +295,7 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 		EMA50M1 := utils.CalculateEMA(closesM1, 50)
 		if ema25M5 < ema50M5 && EMA25M1[len(EMA25M1)-1] < EMA50M1[len(EMA50M1)-1] && DownMACD {
 			//5分钟死叉，1分钟死叉,MACD
-			status = "Soon"
+			status = "View"
 		} else {
 			status = "Wait"
 		}
@@ -316,7 +316,7 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 		EMA50M1 := utils.CalculateEMA(closesM1, 50)
 		if priceGT_EMA25 && ema25M5 > ema50M5 && EMA25M1[len(EMA25M1)-1] > EMA50M1[len(EMA50M1)-1] && UpMACD {
 			//GT,5分钟金叉, 1分钟金叉，MACD
-			status = "LongSoon"
+			status = "LongView"
 		} else {
 			status = "Wait"
 		}
@@ -341,7 +341,7 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 		EMA50M1 := utils.CalculateEMA(closesM1, 50)
 		if !priceGT_EMA25 && ema25M5 < ema50M5 && EMA25M1[len(EMA25M1)-1] < EMA50M1[len(EMA50M1)-1] && DownMACD {
 			//!GT,5分钟死叉，1分钟死叉，MACD
-			status = "LongSoon"
+			status = "LongView"
 		} else {
 			status = "Wait"
 		}
@@ -362,7 +362,7 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 		EMA50M1 := utils.CalculateEMA(closesM1, 50)
 
 		if ema25M5 > ema50M5 && UpMACD && EMA25M1[len(EMA25M1)-1] > EMA50M1[len(EMA50M1)-1] {
-			status = "Soon"
+			status = "View"
 		} else {
 			status = "Wait"
 		}
