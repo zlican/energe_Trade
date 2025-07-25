@@ -32,7 +32,7 @@ func PushTelegram(results []types.CoinIndicator, botToken, high_profit_srsi_botT
 	for _, r := range filteredResults {
 		operation := r.Operation
 		volume, ok := volumeCache.Get(r.Symbol)
-		if !ok || volume < 300000000 {
+		if !ok || volume < 500000000 {
 			continue
 		}
 

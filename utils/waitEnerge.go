@@ -16,6 +16,7 @@ import (
 type waitToken struct {
 	Symbol    string
 	Operation string
+	Status    string
 	AddedAt   time.Time
 }
 
@@ -110,7 +111,7 @@ func WaitEnerge(resultsChan chan []types.CoinIndicator, db *sql.DB, wait_sucess_
 					switch token.Operation {
 					case "Buy":
 						if priceGT && ema25M15 > ema50M15 && ema25M5 > ema50M5 && UpMACD && EMA25M1[len(EMA25M1)-1] > EMA50M1[len(EMA50M1)-1] {
-							msg := fmt.Sprintf("🟢%s \n价格：%.4f  时间：%s", sym, price1, now.Format("15:04"))
+							msg := fmt.Sprintf("🟢%s(%s) \n价格：%.4f  时间：%s", sym, token.Status, price1, now.Format("15:04"))
 							telegram.SendMessage(wait_sucess_token, chatID, msg)
 							log.Printf("🟢 等待成功 Buy : %s", sym)
 							waitMu.Lock()
@@ -126,7 +127,7 @@ func WaitEnerge(resultsChan chan []types.CoinIndicator, db *sql.DB, wait_sucess_
 						}
 					case "Sell":
 						if !priceGT && ema25M15 < ema50M15 && ema25M5 < ema50M5 && DownMACD && EMA25M1[len(EMA25M1)-1] < EMA50M1[len(EMA50M1)-1] {
-							msg := fmt.Sprintf("🔴%s \n价格：%.4f  时间：%s", sym, price1, now.Format("15:04"))
+							msg := fmt.Sprintf("🔴%s(%s) \n价格：%.4f  时间：%s", sym, token.Status, price1, now.Format("15:04"))
 							telegram.SendMessage(wait_sucess_token, chatID, msg)
 							log.Printf("🔴 等待成功 Sell : %s", sym)
 							waitMu.Lock()
@@ -142,14 +143,14 @@ func WaitEnerge(resultsChan chan []types.CoinIndicator, db *sql.DB, wait_sucess_
 						}
 					case "LongBuy":
 						if ema25M5 > ema50M5 && UpMACD && EMA25M1[len(EMA25M1)-1] > EMA50M1[len(EMA50M1)-1] {
-							msg := fmt.Sprintf("🟢%s \n价格：%.4f  时间：%s", sym, price1, now.Format("15:04"))
+							msg := fmt.Sprintf("🟢%s(%s) \n价格：%.4f  时间：%s", sym, token.Status, price1, now.Format("15:04"))
 							telegram.SendMessage(wait_sucess_token, chatID, msg)
 							log.Printf("🟢 等待成功 Buy : %s", sym)
 							waitMu.Lock()
 							delete(waitList, sym)
 							waitMu.Unlock()
 							changed = true
-						} else if ema25H1 < ema50H1 {
+						} else if ema25H1 < ema50H1 { //long是一小时
 							log.Printf("❌ Wait失败 Buy : %s", sym)
 							waitMu.Lock()
 							delete(waitList, sym)
@@ -158,7 +159,7 @@ func WaitEnerge(resultsChan chan []types.CoinIndicator, db *sql.DB, wait_sucess_
 						}
 					case "LongSell":
 						if ema25M5 < ema50M5 && DownMACD && EMA25M1[len(EMA25M1)-1] < EMA50M1[len(EMA50M1)-1] {
-							msg := fmt.Sprintf("🔴%s \n价格：%.4f  时间：%s", sym, price1, now.Format("15:04"))
+							msg := fmt.Sprintf("🔴%s(%s) \n价格：%.4f  时间：%s", sym, token.Status, price1, now.Format("15:04"))
 							telegram.SendMessage(wait_sucess_token, chatID, msg)
 							log.Printf("🔴 等待成功 Sell : %s", sym)
 							waitMu.Lock()
@@ -174,14 +175,14 @@ func WaitEnerge(resultsChan chan []types.CoinIndicator, db *sql.DB, wait_sucess_
 						}
 					case "BuyBE":
 						if ema25M5 > ema50M5 && UpMACD && EMA25M1[len(EMA25M1)-1] > EMA50M1[len(EMA50M1)-1] {
-							msg := fmt.Sprintf("🟢%s \n价格：%.4f  时间：%s", sym, price1, now.Format("15:04"))
+							msg := fmt.Sprintf("🟢%s(%s) \n价格：%.4f  时间：%s", sym, token.Status, price1, now.Format("15:04"))
 							telegram.SendMessage(wait_sucess_token, chatID, msg)
 							log.Printf("🟢 等待成功 Buy : %s", sym)
 							waitMu.Lock()
 							delete(waitList, sym)
 							waitMu.Unlock()
 							changed = true
-						} else if ema25M15 < ema50M15 {
+						} else if ema25M5 < ema50M5 { //BuyBE是5分钟
 							log.Printf("❌ Wait失败 Buy : %s", sym)
 							waitMu.Lock()
 							delete(waitList, sym)
@@ -219,6 +220,7 @@ func WaitEnerge(resultsChan chan []types.CoinIndicator, db *sql.DB, wait_sucess_
 					waitList[coin.Symbol] = waitToken{
 						Symbol:    coin.Symbol,
 						Operation: coin.Operation,
+						Status:    coin.Status,
 						AddedAt:   now,
 					}
 					log.Printf("✅ 添加或替换等待代币: %s", coin.Symbol)

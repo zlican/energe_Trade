@@ -29,7 +29,7 @@ var (
 	proxyURL                  = "http://127.0.0.1:10809"
 	klinesCount               = 200
 	maxWorkers                = 20
-	limitVolume               = 300000000                                        //3亿 USDT
+	limitVolume               = 500000000                                        //5亿 USDT
 	botToken                  = "8040107823:AAHC_qu5cguJf9BG4NDiUB_nwpgF-bPkJAg" //二级印钞
 	wait_energe_botToken      = "7381664741:AAEmhhEhsq8nBgThtsOfVklNb6q4TjvI_Og" //播报成功
 	energe_waiting_botToken   = "7417712542:AAGjCOMeFFFuNCo5vNBWDYJqGs0Qm2ifwmY" //等待区bot
@@ -247,8 +247,7 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 	UpMACD := utils.IsAboutToGoldenCross(closes, 6, 13, 5)
 	DownMACD := utils.IsAboutToDeadCross(closes, 6, 13, 5)
 
-	//有效穿透
-	isBTCOrETH := symbol == "BTCUSDT" || symbol == "ETHUSDT"
+	//isBTCOrETH := symbol == "BTCUSDT" || symbol == "ETHUSDT"
 
 	//BE专属
 	var isBE, BEBelowEMA25 bool
@@ -282,10 +281,10 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 			Status:       status,
 			Operation:    "Buy"}, true
 	case down && sellCond:
-		if !isBTCOrETH {
-			// 只做空 BTC、ETH、SOL，其他跳过
+		/* 		if !isBTCOrETH {
+			// 只做空 BTC、ETH其他跳过
 			return types.CoinIndicator{}, false
-		}
+		} */
 		progressLogger.Printf("SELL 触发: %s %.2f", symbol, price) // 👈
 		_, _, closesM1, err := utils.GetKlinesByAPI(client, symbol, "1m", klinesCount)
 		if err != nil || len(opens) < 2 || len(closes) < 2 {
@@ -328,10 +327,10 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 			Status:       status,
 			Operation:    "LongBuy"}, true
 	case longSell && longSellCond:
-		if !isBTCOrETH {
-			// 只做空 BTC、ETH、SOL，其他跳过
+		/* 		if !isBTCOrETH {
+			// 只做空 BTC、ETH其他跳过
 			return types.CoinIndicator{}, false
-		}
+		} */
 		progressLogger.Printf("LongSell 触发: %s %.2f", symbol, price) // 👈
 		_, _, closesM1, err := utils.GetKlinesByAPI(client, symbol, "1m", klinesCount)
 		if err != nil || len(opens) < 2 || len(closes) < 2 {
