@@ -379,27 +379,6 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 			StochRSI:     srsi15M,
 			Status:       status,
 			Operation:    "BuyBE"}, true
-	case BEDOWN:
-		progressLogger.Printf("View 触发: %s %.2f", symbol, price) // 👈
-		_, _, closesM1, err := utils.GetKlinesByAPI(client, symbol, "1m", klinesCount)
-		if err != nil || len(opens) < 2 || len(closes) < 2 {
-			return types.CoinIndicator{}, false
-		}
-		EMA25M1 := utils.CalculateEMA(closesM1, 25)
-		EMA50M1 := utils.CalculateEMA(closesM1, 50)
-
-		if DownMACD && EMA25M1[len(EMA25M1)-1] < EMA50M1[len(EMA50M1)-1] {
-			status = "ViewBE"
-		} else {
-			return types.CoinIndicator{}, false
-		}
-		return types.CoinIndicator{
-			Symbol:       symbol,
-			Price:        price,
-			TimeInternal: tf,
-			StochRSI:     srsi15M,
-			Status:       status,
-			Operation:    "ViewBE"}, true
 	case BEUP:
 		progressLogger.Printf("View 触发: %s %.2f", symbol, price) // 👈
 		_, _, closesM1, err := utils.GetKlinesByAPI(client, symbol, "1m", klinesCount)
@@ -420,7 +399,29 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 			TimeInternal: tf,
 			StochRSI:     srsi15M,
 			Status:       status,
-			Operation:    "ViewBE"}, true
+			Operation:    "BuyBE"}, true
+	case BEDOWN:
+		progressLogger.Printf("View 触发: %s %.2f", symbol, price) // 👈
+		_, _, closesM1, err := utils.GetKlinesByAPI(client, symbol, "1m", klinesCount)
+		if err != nil || len(opens) < 2 || len(closes) < 2 {
+			return types.CoinIndicator{}, false
+		}
+		EMA25M1 := utils.CalculateEMA(closesM1, 25)
+		EMA50M1 := utils.CalculateEMA(closesM1, 50)
+
+		if DownMACD && EMA25M1[len(EMA25M1)-1] < EMA50M1[len(EMA50M1)-1] {
+			status = "ViewBE"
+		} else {
+			return types.CoinIndicator{}, false
+		}
+		return types.CoinIndicator{
+			Symbol:       symbol,
+			Price:        price,
+			TimeInternal: tf,
+			StochRSI:     srsi15M,
+			Status:       status,
+			Operation:    "SellBE"}, true
+
 	default:
 		return types.CoinIndicator{}, false
 	}

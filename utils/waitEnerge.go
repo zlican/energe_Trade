@@ -50,7 +50,7 @@ func sendWaitListBroadcast(now time.Time, waiting_token, chatID string) {
 		if token.Symbol == "BTCUSDT" || token.Symbol == "ETHUSDT" {
 			emoje = "💎" + emoje
 		}
-		msgBuilder.WriteString(fmt.Sprintf("%s %-12s	加入: %s\n", emoje, token.Symbol, token.AddedAt.Format("15:04")))
+		msgBuilder.WriteString(fmt.Sprintf("%s %-12s(%s)	加入: %s\n", emoje, token.Symbol, token.Operation, token.AddedAt.Format("15:04")))
 	}
 	msg := msgBuilder.String()
 	log.Printf("📤 推送等待区更新列表，共 %d 个代币", len(waitList))
