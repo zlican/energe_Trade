@@ -388,7 +388,7 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 		EMA25M1 := utils.CalculateEMA(closesM1, 25)
 		EMA50M1 := utils.CalculateEMA(closesM1, 50)
 
-		if DownMACD && EMA25M1[len(EMA25M1)-1] > EMA50M1[len(EMA50M1)-1] {
+		if UpMACD && EMA25M1[len(EMA25M1)-1] > EMA50M1[len(EMA50M1)-1] {
 			status = "ViewBE"
 		} else {
 			return types.CoinIndicator{}, false
