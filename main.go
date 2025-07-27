@@ -29,7 +29,7 @@ var (
 	proxyURL                  = "http://127.0.0.1:10809"
 	klinesCount               = 200
 	maxWorkers                = 20
-	limitVolume               = 500000000                                        //5亿 USDT
+	limitVolume               = 300000000                                        //5亿 USDT
 	botToken                  = "8040107823:AAHC_qu5cguJf9BG4NDiUB_nwpgF-bPkJAg" //二级印钞
 	wait_energe_botToken      = "7381664741:AAEmhhEhsq8nBgThtsOfVklNb6q4TjvI_Og" //播报成功
 	energe_waiting_botToken   = "7417712542:AAGjCOMeFFFuNCo5vNBWDYJqGs0Qm2ifwmY" //等待区bot
@@ -48,7 +48,7 @@ var (
 		"SPXUSDT", "TONUSDT", "ETCUSDT", "PUMPUSDT", "ENAUSDT", "LDOUSDT", "NEIROUSDT", "AAVEUSDT",
 		"UNIUSDT", "APTUSDT", "TRUMPUSDT", "DOGEUSDC", "VIRTUALUSDT", "SEIUSDT", "WIFUSDT",
 		"ONDOUSDT", "MOODENGUSDT", "PENGUUSDT", "NEIROETHUSDT", "CROSSUSDT", "SUIUSDT", "OPUSDT",
-		"FXSUSDT", "DOGEUSDT", "SOLUSDT"} // 想排除的币放这里
+		"FXSUSDT", "DOGEUSDT", "SOLUSDT", "VINEUSDT"} // 想排除的币放这里
 	muVolumeMap    sync.Mutex
 	progressLogger = log.New(os.Stdout, "[Screener] ", log.LstdFlags)
 	db             *sql.DB
@@ -247,7 +247,7 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 	UpMACD := utils.IsAboutToGoldenCross(closes, 6, 13, 5)
 	DownMACD := utils.IsAboutToDeadCross(closes, 6, 13, 5)
 
-	//isBTCOrETH := symbol == "BTCUSDT" || symbol == "ETHUSDT"
+	isBTCOrETH := symbol == "BTCUSDT" || symbol == "ETHUSDT"
 
 	//BE专属
 	var isBE, BEBelowEMA25, BEAboveEMA25 bool
@@ -275,7 +275,7 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 		EMA25M1 := utils.CalculateEMA(closesM1, 25)
 		EMA50M1 := utils.CalculateEMA(closesM1, 50)
 		if ema25M5 > ema50M5 && EMA25M1[len(EMA25M1)-1] > EMA50M1[len(EMA50M1)-1] && UpMACD {
-			//5分钟金叉，1分钟金叉，MACD趋向
+			//5分钟金叉(1分钟金叉)MACD趋向
 			status = "View"
 		} else {
 			status = "Wait"
@@ -288,10 +288,10 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 			Status:       status,
 			Operation:    "Buy"}, true
 	case down && sellCond:
-		/* 		if !isBTCOrETH {
+		if !isBTCOrETH {
 			// 只做空 BTC、ETH其他跳过
 			return types.CoinIndicator{}, false
-		} */
+		}
 		progressLogger.Printf("SELL 触发: %s %.2f", symbol, price) // 👈
 		_, _, closesM1, err := utils.GetKlinesByAPI(client, symbol, "1m", klinesCount)
 		if err != nil || len(opens) < 2 || len(closes) < 2 {
@@ -334,10 +334,10 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 			Status:       status,
 			Operation:    "LongBuy"}, true
 	case longSell && longSellCond:
-		/* 		if !isBTCOrETH {
+		if !isBTCOrETH {
 			// 只做空 BTC、ETH其他跳过
 			return types.CoinIndicator{}, false
-		} */
+		}
 		progressLogger.Printf("LongSell 触发: %s %.2f", symbol, price) // 👈
 		_, _, closesM1, err := utils.GetKlinesByAPI(client, symbol, "1m", klinesCount)
 		if err != nil || len(opens) < 2 || len(closes) < 2 {
