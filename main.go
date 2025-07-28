@@ -29,7 +29,7 @@ var (
 	proxyURL                  = "http://127.0.0.1:10809"
 	klinesCount               = 200
 	maxWorkers                = 20
-	limitVolume               = 300000000                                        //5亿 USDT
+	limitVolume               = 5000000000                                       //50亿 USDT
 	botToken                  = "8040107823:AAHC_qu5cguJf9BG4NDiUB_nwpgF-bPkJAg" //二级印钞
 	wait_energe_botToken      = "7381664741:AAEmhhEhsq8nBgThtsOfVklNb6q4TjvI_Og" //播报成功
 	energe_waiting_botToken   = "7417712542:AAGjCOMeFFFuNCo5vNBWDYJqGs0Qm2ifwmY" //等待区bot
@@ -266,6 +266,10 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 	var status string
 	switch {
 	case up && buyCond:
+		if !isBTCOrETH {
+			// 只做多 BTC、ETH其他跳过
+			return types.CoinIndicator{}, false
+		}
 		progressLogger.Printf("BUY 触发: %s %.2f", symbol, price) // 👈
 		//这里对通过一层的代币增加 死叉传递理论（1分钟）
 		_, _, closesM1, err := utils.GetKlinesByAPI(client, symbol, "1m", klinesCount)
@@ -313,6 +317,10 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 			Status:       status,
 			Operation:    "Sell"}, true
 	case longUp && longBuyCond:
+		if !isBTCOrETH {
+			// 只做多 BTC、ETH其他跳过
+			return types.CoinIndicator{}, false
+		}
 		progressLogger.Printf("LongBUY 触发: %s %.2f", symbol, price) // 👈
 		_, _, closesM1, err := utils.GetKlinesByAPI(client, symbol, "1m", klinesCount)
 		if err != nil || len(opens) < 2 || len(closes) < 2 {
