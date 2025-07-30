@@ -46,10 +46,7 @@ func sendWaitListBroadcast(now time.Time, waiting_token, chatID string) {
 		} else {
 			emoje = "-"
 		}
-		// 如果是 BTC 或 ETH，加上 💎
-		if token.Symbol == "BTCUSDT" || token.Symbol == "ETHUSDT" {
-			emoje = "💎" + emoje
-		}
+
 		msgBuilder.WriteString(fmt.Sprintf("%s %-12s(%s)	加入: %s\n", emoje, token.Symbol, token.Operation, token.AddedAt.Format("15:04")))
 	}
 	msg := msgBuilder.String()
@@ -219,7 +216,7 @@ func WaitEnerge(resultsChan chan []types.CoinIndicator, db *sql.DB, wait_sucess_
 
 		waitMu.Lock()
 		for _, coin := range newResults {
-			if coin.Status == "Wait" {
+			if coin.Status == "Wait" || coin.Status == "LongWait" {
 				existing, exists := waitList[coin.Symbol]
 				if !exists || existing.Operation != coin.Operation {
 					waitList[coin.Symbol] = waitToken{

@@ -49,10 +49,8 @@ func PushTelegram(results []types.CoinIndicator, botToken, high_profit_srsi_botT
 			} else {
 				line = fmt.Sprintf("🔴%-4s %-10s (%4s)", r.Operation, r.Symbol, r.Status)
 			}
-		} else if operation == "LongBuy" {
-			line = fmt.Sprintf("🟢%-4s %-10s (%4s)", r.Operation, r.Symbol, r.Status)
-		} else if operation == "LongSell" {
-			line = fmt.Sprintf("🔴%-4s %-10s (%4s)", r.Operation, r.Symbol, r.Status)
+		} else if operation == "ViewBE" {
+			line = fmt.Sprintf("🟣%-4s %-10s (%4s)", r.Operation, r.Symbol, r.Status)
 		} else {
 			continue
 		}

@@ -407,7 +407,7 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 			TimeInternal: tf,
 			StochRSI:     srsi15M,
 			Status:       status,
-			Operation:    "BuyBE"}, true
+			Operation:    "	ViewBEBuy"}, true
 	case BEDOWN:
 		progressLogger.Printf("View 触发: %s %.2f", symbol, price) // 👈
 		_, _, closesM1, err := utils.GetKlinesByAPI(client, symbol, "1m", klinesCount)
@@ -428,7 +428,7 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 			TimeInternal: tf,
 			StochRSI:     srsi15M,
 			Status:       status,
-			Operation:    "SellBE"}, true
+			Operation:    "ViewBE"}, true
 
 	default:
 		return types.CoinIndicator{}, false
