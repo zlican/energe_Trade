@@ -29,32 +29,25 @@ func PushTelegram(results []types.CoinIndicator, botToken, high_profit_srsi_botT
 		msgBuilder.WriteString(fmt.Sprintf("🎁Time：%s\n", now))
 	}
 
+	// 操作与前缀符号的映射
+	operationIcons := map[string]string{
+		"Buy":      "🟢",
+		"LongBuy":  "🟢",
+		"BuyBE":    "🟢",
+		"Sell":     "🔴",
+		"LongSell": "🔴",
+		"SellBE":   "🔴",
+		"ViewBE":   "🟣",
+	}
+
 	for _, r := range filteredResults {
-		operation := r.Operation
-		volume, ok := volumeCache.Get(r.Symbol)
-		if !ok || volume < 5000000000 {
-			continue
+		icon, ok := operationIcons[r.Operation]
+		fmt.Println(ok)
+		if !ok {
+			continue // 非指定操作类型跳过
 		}
 
-		var line string
-		if operation == "Buy" || operation == "LongBuy" || operation == "BuyBE" {
-			if r.Symbol == "BTCUSDT" || r.Symbol == "ETHUSDT" {
-				line = fmt.Sprintf("🟢%-4s %-10s (%4s)", r.Operation, r.Symbol, r.Status)
-			} else {
-				line = fmt.Sprintf("🟢%-4s %-10s (%4s)", r.Operation, r.Symbol, r.Status)
-			}
-		} else if operation == "Sell" || operation == "LongSell" || operation == "SellBE" {
-			if r.Symbol == "BTCUSDT" || r.Symbol == "ETHUSDT" {
-				line = fmt.Sprintf("🔴%-4s %-10s (%4s)", r.Operation, r.Symbol, r.Status)
-			} else {
-				line = fmt.Sprintf("🔴%-4s %-10s (%4s)", r.Operation, r.Symbol, r.Status)
-			}
-		} else if operation == "ViewBE" {
-			line = fmt.Sprintf("🟣%-4s %-10s (%4s)", r.Operation, r.Symbol, r.Status)
-		} else {
-			continue
-		}
-
+		line := fmt.Sprintf("%s%-4s %-10s (%4s)", icon, r.Operation, r.Symbol, r.Status)
 		msgBuilder.WriteString(line + "\n")
 	}
 
