@@ -218,8 +218,8 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 	}
 
 	price := closes[len(closes)-1]
-	ema25M15, ema50M15, ema169M15 := utils.Get15MEMAFromDB(db, symbol)
-	ema25M1H, ema50M1H := utils.Get1HEMAFromDB(db, symbol)
+	ema25M15, ema50M15, _ := utils.Get15MEMAFromDB(db, symbol)
+	ema25M1H, _ := utils.Get1HEMAFromDB(db, symbol)
 	ema25M5, ema50M5 := utils.Get5MEMAFromDB(db, symbol)
 	priceGT_EMA25 := utils.GetPriceGT_EMA25FromDB(db, symbol) //1H 价格在25EMA上方
 
@@ -230,18 +230,11 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 	up = priceGT_EMA25 && ema25M15 > ema50M15    //1H GT +15分钟金叉
 	down = !priceGT_EMA25 && ema25M15 < ema50M15 //1H !GT + 15分钟死叉
 
-	var srsi15M, srsi1H float64
+	var srsi15M float64
 	srsi15M = utils.Get15SRSIFromDB(db, symbol)
 
 	buyCond := srsi15M < 35
 	sellCond := srsi15M > 65
-
-	//左侧高性价比模型
-	longUp := ema25M1H > ema50M1H && price > ema169M15
-	longSell := ema25M1H < ema50M1H && price < ema169M15
-
-	longBuyCond := srsi1H < 20 && srsi15M < 25
-	longSellCond := srsi1H > 80 && srsi15M > 75
 
 	//MACD模型
 	UpMACD := utils.IsAboutToGoldenCross(closes, 6, 13, 5)
@@ -256,12 +249,10 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 		BEBelowEMA25 = price < ema25M1H //1小时之下
 		BEAboveEMA25 = price > ema25M1H //1小时之上
 	}
-	//1.抄底
-	BEWAIT := isBE && BEBelowEMA25 && ema25M5 > ema50M5 //后面加上1分钟区分view和wait
-	//2.猛烈下跌
-	BEDOWN := isBE && BEBelowEMA25 && ema25M15 < ema50M15 && ema25M5 < ema50M5 //后面加上1分钟死叉为view
-	//3.猛烈上涨
-	BEUP := isBE && BEAboveEMA25 && ema25M15 > ema50M15 && ema25M5 > ema50M5 //后面加上1分钟金叉为view
+	//1.猛烈下跌
+	BEDOWN := isBE && BEBelowEMA25 && ema25M15 < ema50M15 && ema25M5 < ema50M5
+	//2.猛烈上涨
+	BEUP := isBE && BEAboveEMA25 && ema25M15 > ema50M15 && ema25M5 > ema50M5
 
 	var status string
 	switch {
@@ -316,87 +307,9 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 			StochRSI:     srsi15M,
 			Status:       status,
 			Operation:    "Sell"}, true
-	case longUp && longBuyCond:
-		if !isBTCOrETH {
-			// 只做多 BTC、ETH其他跳过
-			return types.CoinIndicator{}, false
-		}
-		progressLogger.Printf("LongBUY 触发: %s %.2f", symbol, price) // 👈
-		_, _, closesM1, err := utils.GetKlinesByAPI(client, symbol, "1m", klinesCount)
-		if err != nil || len(opens) < 2 || len(closes) < 2 {
-			return types.CoinIndicator{}, false
-		}
-		EMA25M1 := utils.CalculateEMA(closesM1, 25)
-		EMA50M1 := utils.CalculateEMA(closesM1, 50)
-		if priceGT_EMA25 && ema25M5 > ema50M5 && EMA25M1[len(EMA25M1)-1] > EMA50M1[len(EMA50M1)-1] && UpMACD {
-			//GT,5分钟金叉, 1分钟金叉，MACD
-			status = "LongView"
-		} else {
-			status = "LongWait"
-		}
-		return types.CoinIndicator{
-			Symbol:       symbol,
-			Price:        price,
-			TimeInternal: tf,
-			StochRSI:     srsi15M,
-			Status:       status,
-			Operation:    "LongBuy"}, true
-	case longSell && longSellCond:
-		if !isBTCOrETH {
-			// 只做空 BTC、ETH其他跳过
-			return types.CoinIndicator{}, false
-		}
-		progressLogger.Printf("LongSell 触发: %s %.2f", symbol, price) // 👈
-		_, _, closesM1, err := utils.GetKlinesByAPI(client, symbol, "1m", klinesCount)
-		if err != nil || len(opens) < 2 || len(closes) < 2 {
-			return types.CoinIndicator{}, false
-		}
-		EMA25M1 := utils.CalculateEMA(closesM1, 25)
-		EMA50M1 := utils.CalculateEMA(closesM1, 50)
-		if !priceGT_EMA25 && ema25M5 < ema50M5 && EMA25M1[len(EMA25M1)-1] < EMA50M1[len(EMA50M1)-1] && DownMACD {
-			//!GT,5分钟死叉，1分钟死叉，MACD
-			status = "LongView"
-		} else {
-			status = "LongWait"
-		}
-		return types.CoinIndicator{
-			Symbol:       symbol,
-			Price:        price,
-			TimeInternal: tf,
-			StochRSI:     srsi15M,
-			Status:       status,
-			Operation:    "LongSell"}, true
-	case BEWAIT:
-		progressLogger.Printf("BUY 触发: %s %.2f", symbol, price) // 👈
-		_, _, closesM1, err := utils.GetKlinesByAPI(client, symbol, "1m", klinesCount)
-		if err != nil || len(opens) < 2 || len(closes) < 2 {
-			return types.CoinIndicator{}, false
-		}
-		EMA25M1 := utils.CalculateEMA(closesM1, 25)
-		EMA50M1 := utils.CalculateEMA(closesM1, 50)
-
-		if UpMACD && EMA25M1[len(EMA25M1)-1] > EMA50M1[len(EMA50M1)-1] {
-			status = "View"
-		} else {
-			status = "Wait"
-		}
-		return types.CoinIndicator{
-			Symbol:       symbol,
-			Price:        price,
-			TimeInternal: tf,
-			StochRSI:     srsi15M,
-			Status:       status,
-			Operation:    "BuyBE"}, true
 	case BEUP:
 		progressLogger.Printf("View 触发: %s %.2f", symbol, price) // 👈
-		_, _, closesM1, err := utils.GetKlinesByAPI(client, symbol, "1m", klinesCount)
-		if err != nil || len(opens) < 2 || len(closes) < 2 {
-			return types.CoinIndicator{}, false
-		}
-		EMA25M1 := utils.CalculateEMA(closesM1, 25)
-		EMA50M1 := utils.CalculateEMA(closesM1, 50)
-
-		if UpMACD && EMA25M1[len(EMA25M1)-1] > EMA50M1[len(EMA50M1)-1] {
+		if UpMACD {
 			status = "ViewBE"
 		} else {
 			return types.CoinIndicator{}, false
@@ -410,14 +323,7 @@ func analyseSymbol(client *futures.Client, symbol, tf string, db *sql.DB, bestre
 			Operation:    "ViewBE"}, true
 	case BEDOWN:
 		progressLogger.Printf("View 触发: %s %.2f", symbol, price) // 👈
-		_, _, closesM1, err := utils.GetKlinesByAPI(client, symbol, "1m", klinesCount)
-		if err != nil || len(opens) < 2 || len(closes) < 2 {
-			return types.CoinIndicator{}, false
-		}
-		EMA25M1 := utils.CalculateEMA(closesM1, 25)
-		EMA50M1 := utils.CalculateEMA(closesM1, 50)
-
-		if DownMACD && EMA25M1[len(EMA25M1)-1] < EMA50M1[len(EMA50M1)-1] {
+		if DownMACD {
 			status = "ViewBE"
 		} else {
 			return types.CoinIndicator{}, false

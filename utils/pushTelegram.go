@@ -17,7 +17,7 @@ func PushTelegram(results []types.CoinIndicator, botToken, high_profit_srsi_botT
 
 	var filteredResults []types.CoinIndicator
 	for _, r := range results {
-		if r.Status != "Wait" && r.Status != "LongWait" {
+		if r.Status != "Wait" {
 			filteredResults = append(filteredResults, r)
 		}
 	}
@@ -27,17 +27,29 @@ func PushTelegram(results []types.CoinIndicator, botToken, high_profit_srsi_botT
 		msgBuilder.WriteString(fmt.Sprintf("（无）Time：%s\n", now))
 	} else {
 		msgBuilder.WriteString(fmt.Sprintf("🎁Time：%s\n", now))
+		// 添加 betray 趋势信息
+		var trendParts []string
+		if betrend.BTC == "up" {
+			trendParts = append(trendParts, "BTC 做多")
+		} else if betrend.BTC == "down" {
+			trendParts = append(trendParts, "BTC 做空")
+		}
+		if betrend.ETH == "up" {
+			trendParts = append(trendParts, "ETH 做多")
+		} else if betrend.ETH == "down" {
+			trendParts = append(trendParts, "ETH 做空")
+		}
+
+		if len(trendParts) > 0 {
+			msgBuilder.WriteString("📈趋势：" + strings.Join(trendParts, " | ") + "\n")
+		}
 	}
 
 	// 操作与前缀符号的映射
 	operationIcons := map[string]string{
-		"Buy":      "🟢",
-		"LongBuy":  "🟢",
-		"BuyBE":    "🟢",
-		"Sell":     "🔴",
-		"LongSell": "🔴",
-		"SellBE":   "🔴",
-		"ViewBE":   "🟣",
+		"Buy":    "🟢",
+		"Sell":   "🔴",
+		"ViewBE": "🟣",
 	}
 
 	for _, r := range filteredResults {
